@@ -4,26 +4,28 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cold Stretch Live</title>
-<meta name="description" content="Live college basketball totals: every game's score flow, DraftKings' live line and a fair final-score estimate, side by side.">
-<meta name="theme-color" content="#101826" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#f4f6f9" media="(prefers-color-scheme: light)">
+<meta name="description" content="Live college basketball totals: DraftKings' live line set against a fair final-score estimate for every game, with the record kept.">
+<meta name="theme-color" content="#F4F6F9">
 <meta property="og:title" content="Cold Stretch Live">
-<meta property="og:description" content="Does the book's live total drop too far when a team goes cold? Every game, tracked.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23101826'/%3E%3Cpath d='M5 16h22' stroke='%2326344a' stroke-width='2'/%3E%3Cpath d='M16 6v20' stroke='%237cc4ff' stroke-width='3'/%3E%3Cpath d='M9 9v14' stroke='%23ffb020' stroke-width='4'/%3E%3C/svg%3E">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
+<meta property="og:description" content="Does the book's live total drop too far when a team goes cold? Every game, measured.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230F1B2D'/%3E%3Cpath d='M6 21h7v-6h6v-5h7' fill='none' stroke='%23F0843C' stroke-width='3'/%3E%3Cpath d='M6 17c7 0 12-2 20-9' fill='none' stroke='%237FA2FF' stroke-width='3'/%3E%3C/svg%3E">
+<link rel="preload" href="fonts/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="css/app.css">
 </head>
 <body>
+<a class="skip" href="#main">Skip to content</a>
 
 <header class="mast">
-  <div class="mast-in">
-    <div class="mast-top">
-      <h1 class="wordmark">Cold Stretch Live</h1>
-      <p class="pulse" id="pulse" role="status" aria-live="polite">Loading</p>
+  <div class="wrap mast-in">
+    <div>
+      <a class="wordmark" href="#/board">Cold Stretch Live</a>
+      <p class="tagline">College basketball live totals, measured against a fair number</p>
     </div>
-    <nav class="nav" aria-label="Views">
+    <p class="pulse" id="pulse" role="status" aria-live="polite">Loading</p>
+  </div>
+  <div class="nav-rule">
+    <nav class="wrap nav" aria-label="Views">
       <button type="button" data-view="board" aria-current="page">Board</button>
       <button type="button" data-view="game">Game</button>
       <button type="button" data-view="record">Record</button>
@@ -31,7 +33,7 @@
   </div>
 </header>
 
-<main class="page">
+<main class="wrap page" id="main">
 
   <section id="view-board">
     <div class="tool">
@@ -43,32 +45,63 @@
       </div>
       <button type="button" class="key" id="only" aria-pressed="false">Signals only</button>
     </div>
-    <p class="lede">Each row sets DraftKings’ live total against a fair final score for the game as it stands. On the bar, the blue line is fair and the amber mark is the book: left of the line the book is low, right of it the book is high.</p>
 
-    <h2 class="head">In progress<span id="live-count"></span></h2>
-    <div id="board-wrap" hidden>
-      <div class="board">
-        <div class="board-head" aria-hidden="true">
-          <span>Clock</span><span>Game</span><span class="r">Book</span><span class="r">Fair</span><span>Book against fair</span><span class="r">Gap</span><span class="h-tt">Team totals, gap</span><span class="h-spark">Gap so far</span><span>Read</span>
-        </div>
-        <div id="board-rows"></div>
+    <div class="lead">
+      <div class="lead-say">
+        <h1 class="headline" id="lead-head">Loading the slate.</h1>
+        <p class="standfirst" id="lead-sub"></p>
       </div>
+      <dl class="figures">
+        <div><dt>points between book and fair, on average</dt><dd id="fig-abs">–</dd></div>
+        <div><dt>of readings had the book 2.5 or more under fair</dt><dd id="fig-low">–</dd></div>
+        <div><dt>of readings had the book 2.5 or more over fair</dt><dd id="fig-high">–</dd></div>
+        <div><dt>signals held for two readings in a row</dt><dd id="fig-sig">–</dd></div>
+      </dl>
     </div>
-    <p class="quiet small" id="board-unlined" hidden></p>
-    <p class="vacant" id="board-empty">Loading the scoreboard.</p>
 
-    <div id="next" hidden>
-      <h2 class="head">Up next</h2>
-      <div class="sched" id="next-rows"></div>
+    <div class="block">
+      <div class="block-head">
+        <h2>Where each game stands</h2>
+        <p class="note">Dot: latest reading. Bar: the range since recording began.</p>
+      </div>
+      <div class="panel stand" id="stand" hidden>
+        <div class="stand-head" aria-hidden="true">
+          <span>Game</span><span>Clock</span>
+          <span class="axis"><span class="z-l">Book high, under side</span><span class="z-r">Book low, over side</span><i style="left:0%">−5</i><i style="left:25%">−2.5</i><i style="left:50%">0</i><i style="left:75%">+2.5</i><i style="left:100%">+5</i></span>
+          <span class="r">Book</span><span class="r">Fair</span><span class="r">Gap</span><span class="r">Over</span><span>Status</span>
+        </div>
+        <div id="stand-rows"></div>
+      </div>
+      <p class="quiet small" id="board-unlined" hidden></p>
+      <p class="vacant" id="board-empty">Loading the scoreboard.</p>
     </div>
-    <div id="finals" hidden>
-      <h2 class="head">Final</h2>
+
+    <div class="split">
+      <section class="panel">
+        <h2 id="hist-title">All readings</h2>
+        <p class="note" id="hist-note">Every recorded line between minute 4 and minute 36.</p>
+        <div class="hist" id="hist"></div>
+      </section>
+      <section>
+        <h2>What three seasons say</h2>
+        <p class="prose">In 16,086 games since 2022, a top-50 team six or more points behind pace at halftime had lost 9.5 points and got 0.6 back. From there it scored at 101.6% of its pregame pace, across 831 team-games.</p>
+        <p class="prose">So a fair live total is the score plus a normal pace for the time left. There is an edge only when the book prices the cold to continue.</p>
+      </section>
+      <section id="next" hidden>
+        <h2>Up next</h2>
+        <div class="sched" id="next-rows"></div>
+      </section>
+    </div>
+
+    <details class="fold" id="finals" hidden>
+      <summary id="finals-sum">Finished games with no line recorded</summary>
       <div class="sched" id="final-rows"></div>
-    </div>
+    </details>
   </section>
 
   <section id="view-game" hidden>
-    <p class="vacant" id="game-none" style="margin-top:18px">Pick a game from the board.</p>
+    <p class="back"><a href="#/board" id="back">&#8249; All games</a></p>
+    <p class="vacant" id="game-none">Pick a game from the board.</p>
     <div id="game-body" hidden>
       <div class="score">
         <div class="side" id="side-away"></div>
@@ -83,32 +116,41 @@
       <p class="read" id="read"></p>
       <dl class="facts">
         <div class="book"><dt id="f-book-l">DraftKings live</dt><dd id="f-book">–</dd></div>
-        <div class="fair"><dt>Fair</dt><dd id="f-fair">–</dd></div>
+        <div class="fair"><dt id="f-fair-l">Fair</dt><dd id="f-fair">–</dd></div>
         <div><dt>Fair minus book</dt><dd id="f-gap">–</dd></div>
         <div><dt>Chance of the over</dt><dd id="f-over">–</dd></div>
         <div><dt>Pregame</dt><dd id="f-pre">–</dd></div>
         <div><dt>If this pace held</dt><dd id="f-pace">–</dd></div>
       </dl>
-      <p class="legend">
-        <span><i class="k-book"></i>DraftKings live</span><span><i class="k-fair"></i>Fair</span><span><i class="k-pace"></i>If the pace held</span><span><i class="k-pre"></i>Pregame</span>
-        <span><i class="k-away"></i><span id="lg-away">Away</span></span><span><i class="k-home"></i><span id="lg-home">Home</span></span>
-      </p>
-      <p class="scrub" id="scrub" aria-live="off"></p>
-      <div class="chart" id="chart"></div>
-
-      <h2 class="head">Signals in this game</h2>
-      <div class="sheet" id="sig-sheet">
-        <table>
-          <thead><tr><th>Market</th><th>Side</th><th>Clock</th><th>Score</th><th class="r">Line</th><th class="r">Fair</th><th class="r">Chance</th><th class="r">Final</th><th>Result</th></tr></thead>
-          <tbody id="sig-rows"></tbody>
-        </table>
+      <div class="panel chart-panel">
+        <p class="legend">
+          <span><i class="k-book"></i>DraftKings live</span><span><i class="k-fair"></i>Fair</span><span><i class="k-pre"></i>Pregame</span>
+          <span><i class="k-away"></i><span id="lg-away">Away</span></span><span><i class="k-home"></i><span id="lg-home">Home</span></span>
+        </p>
+        <p class="scrub" id="scrub" aria-live="off"></p>
+        <div class="chart" id="chart"></div>
       </div>
-      <p class="quiet small" id="sig-none" hidden>None. An empty list is a valid result.</p>
+
+      <div class="block">
+        <h2>Signals in this game</h2>
+        <div class="sheet" id="sig-sheet">
+          <table>
+            <thead><tr><th>Market</th><th>Side</th><th>Clock</th><th>Score</th><th class="r">Line</th><th class="r">Fair</th><th class="r">Chance</th><th class="r">Final</th><th>Result</th></tr></thead>
+            <tbody id="sig-rows"></tbody>
+          </table>
+        </div>
+        <p class="quiet" id="sig-none" hidden>None. An empty list is a valid result.</p>
+      </div>
     </div>
   </section>
 
   <section id="view-record" hidden>
-    <p class="lede">Every signal the recorder has logged, settled against the final score. A signal is the first time a market sits 2.5 or more points from fair, with at least a 62% chance, on two readings in a row. Minutes 4 to 34 only, and never in a blowout.</p>
+    <div class="lead">
+      <div class="lead-say">
+        <h1 class="headline" id="rec-head">The record.</h1>
+        <p class="standfirst">Every signal the recorder has logged, settled against the final score. A signal is the first time a market sits 2.5 or more points from fair, with at least a 62% chance, on two readings in a row. Minutes 4 to 34 only, and never in a blowout.</p>
+      </div>
+    </div>
     <dl class="sums">
       <div><dt>Won–lost</dt><dd id="r-all">–</dd></div>
       <div><dt>Units, 1 risked per signal</dt><dd id="r-units">–</dd></div>
@@ -116,34 +158,40 @@
       <div><dt>Unders: book over fair</dt><dd id="r-under">–</dd></div>
     </dl>
 
-    <h2 class="head">How close the book runs to fair</h2>
-    <div class="sheet" id="days-sheet">
-      <table>
-        <thead><tr><th>Slate</th><th class="r">Games</th><th class="r">Readings</th><th class="r">Average distance</th><th class="r">Book 2.5+ under fair</th><th class="r">Book 2.5+ over fair</th></tr></thead>
-        <tbody id="days-rows"></tbody>
-      </table>
+    <div class="block">
+      <h2>How close the book runs to fair</h2>
+      <div class="sheet" id="days-sheet">
+        <table>
+          <thead><tr><th>Slate</th><th class="r">Games</th><th class="r">Line readings</th><th class="r">Average distance</th><th class="r">Book 2.5+ under fair</th><th class="r">Book 2.5+ over fair</th></tr></thead>
+          <tbody id="days-rows"></tbody>
+        </table>
+      </div>
+      <p class="quiet" id="days-none" hidden>Nothing recorded yet.</p>
     </div>
-    <p class="quiet small" id="days-none" hidden>Nothing recorded yet.</p>
 
-    <h2 class="head">Ledger</h2>
-    <div class="sheet" id="ledger-sheet">
-      <table>
-        <thead><tr><th>Slate</th><th>Game</th><th>Market</th><th>Side</th><th>Clock</th><th>Score</th><th class="r">Line</th><th class="r">Price</th><th class="r">Fair</th><th class="r">Chance</th><th class="r">Final</th><th>Result</th></tr></thead>
-        <tbody id="ledger-rows"></tbody>
-      </table>
+    <div class="block">
+      <h2>Ledger</h2>
+      <div class="sheet" id="ledger-sheet">
+        <table>
+          <thead><tr><th>Slate</th><th>Game</th><th>Market</th><th>Side</th><th>Clock</th><th>Score</th><th class="r">Line</th><th class="r">Price</th><th class="r">Fair</th><th class="r">Chance</th><th class="r">Final</th><th>Result</th></tr></thead>
+          <tbody id="ledger-rows"></tbody>
+        </table>
+      </div>
+      <p class="quiet" id="ledger-none" hidden>No signals logged yet.</p>
+      <p class="quiet small">Game totals are settled at DraftKings’ live price. Team totals are implied from the live total and spread, and priced at an estimated -115.</p>
     </div>
-    <p class="quiet small" id="ledger-none" hidden>No signals logged yet.</p>
-    <p class="quiet small">Game totals are settled at DraftKings’ live price. Team totals are implied from the live total and spread, and priced at an estimated -115.</p>
   </section>
+</main>
 
-  <footer class="foot">
+<footer class="wrap">
+  <div class="foot">
     <p>Scores and play-by-play come from ESPN. Lines are DraftKings’ pregame and live numbers as ESPN publishes them. ESPN drops the live line at the final whistle, so a recorder saves it every 30 seconds while games are on.</p>
     <p>Fair is the current score plus a rest-of-game estimate fitted on 16,086 Division I games, 2022–23 through December 2025. It knows nothing about injuries, foul trouble or who is on the floor. This is information, not betting advice.</p>
     <p><a href="https://github.com/alecmessino/cold-stretch-live">Source, model and recorded data</a></p>
-  </footer>
-</main>
+  </div>
+</footer>
 
-<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
+<script src="vendor/d3.v7.9.2.min.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>

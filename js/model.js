@@ -11,7 +11,21 @@ export const RULES = Object.freeze({
   blowoutLead: 15, // no signals at or beyond this lead
   blowoutSpread: 20, // or this pregame spread
   staleMs: 100000, // a live line older than this is not acted on
+  measureFrom: 4, // the slate summary counts readings between these minutes (the recorder uses the same window)
+  measureTo: 36,
 });
+
+/**
+ * Summary of a set of fair-minus-book gaps: how far apart the two numbers ran, and how often the book
+ * was at least `threshold` points low (the over side) or high (the under side). Shares are percentages.
+ */
+export function gapStats(gaps, threshold = RULES.buyEdge) {
+  const n = gaps.length;
+  if (!n) return { n: 0, abs: null, low: null, high: null };
+  let abs = 0, low = 0, high = 0;
+  for (const g of gaps) { abs += Math.abs(g); if (g >= threshold) low += 1; else if (g <= -threshold) high += 1; }
+  return { n, abs: abs / n, low: (100 * low) / n, high: (100 * high) / n };
+}
 
 /** Elapsed game minutes (0-40) from ESPN's period and "MM:SS" clock. Overtime clamps to 40. */
 export function elapsed(period, clock) {

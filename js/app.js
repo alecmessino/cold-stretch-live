@@ -1,8 +1,8 @@
 // Cold Stretch Live: state, polling, routing and rendering.
 
-import { createModel, RULES, clockLabel, isClockGlitch } from './model.js';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js';
 import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js';
-import { gapBar, spark, gameChart, fmt } from './charts.js';
+import { rangePlot, histogram, gameChart, fmt } from './charts.js';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -30,7 +30,7 @@ const today = () => slateOf(Date.now());
 const S = {
   view: 'board', date: today(), sel: null, market: 'total', only: false, cursor: -1,
   games: new Map(), recorded: new Map(), recordedAt: null, ledger: [], index: [],
-  model: null, scoresAt: 0, error: null, polls: 0, busy: false,
+  model: null, scoresAt: 0, error: null, polls: 0, busy: false, memo: new Map(), histKey: null,
 };
 const isToday = () => S.date === today();
 
@@ -137,16 +137,20 @@ function standing(g) {
   return { ...j, pre, fresh, best };
 }
 
+/** The status column: a signal, or the plain reason there cannot be one. */
 function word(g, st) {
-  if (!st) return ['No pregame line', 'is-off'];
-  if (!st.fresh) return [g.live ? 'Line is stale' : 'No live line', 'is-off'];
-  const b = st.best;
-  if (b && b.weight === 3) return [b.side === 'Over' ? 'Over' : 'Under', b.side === 'Over' ? 'is-over' : 'is-under'];
-  if (b) return [`Lean ${b.side.toLowerCase()}`, 'is-lean'];
-  if (Math.abs(g.away.pts - g.home.pts) >= RULES.blowoutLead || Math.abs(st.pre[1]) >= RULES.blowoutSpread) return ['Blowout', 'is-off'];
-  if (g.minute < RULES.firstMinute) return ['Too early', 'is-off'];
-  if (g.minute > RULES.lastMinute) return ['Too late', 'is-off'];
-  return ['In line', 'is-off'];
+  if (g.state === 'post') return [`Total ${g.away.pts + g.home.pts}`, ''];
+  if (!st) return ['No pregame line', ''];
+  if (!st.fresh) return [g.live ? 'Line is stale' : 'No live line', ''];
+  const b = st.best, where = b && b.key !== 'total' ? `, ${g[b.key].abbr}` : '';
+  if (b && b.weight === 3) return [`${b.side}${where}`, b.side === 'Over' ? 'is-over' : 'is-under'];
+  if (Math.abs(st.pre[1]) >= RULES.blowoutSpread) return [`Spread over ${RULES.blowoutSpread}`, ''];
+  if (g.minute < RULES.firstMinute) return [`Before minute ${RULES.firstMinute}`, ''];
+  if (g.minute > RULES.lastMinute) return [`Past minute ${RULES.lastMinute}`, ''];
+  if (Math.abs(g.away.pts - g.home.pts) >= RULES.blowoutLead) return [`Lead over ${RULES.blowoutLead}`, ''];
+  if (b && b.weight === 2) return [`${b.side}${where}, if it holds`, 'is-live'];
+  if (b) return [`Lean ${b.side.toLowerCase()}${where}`, 'is-live'];
+  return ['In window', 'is-live'];
 }
 
 /* ---------- routing ---------- */
@@ -164,7 +168,7 @@ async function applyRoute() {
   const r = route();
   const dateChanged = r.date !== S.date;
   Object.assign(S, { view: r.view, date: r.date, sel: r.sel || (r.view === 'game' ? S.sel : null), market: r.market || S.market });
-  if (dateChanged) { S.games.clear(); S.recorded = new Map(); S.cursor = -1; }
+  if (dateChanged) { S.games.clear(); S.recorded = new Map(); S.cursor = -1; S.histKey = null; }
   for (const b of document.querySelectorAll('.nav button')) b.toggleAttribute('aria-current', false);
   const cur = $(`.nav button[data-view="${S.view}"]`); if (cur) cur.setAttribute('aria-current', 'page');
   for (const v of ['board', 'game', 'record']) $(`#view-${v}`).hidden = v !== S.view;
@@ -186,40 +190,54 @@ async function openSelected() {
 }
 
 /* ---------- board ---------- */
-function teamCell(t) {
-  const nm = h('span', 'nm');
-  if (t.rank) nm.append(h('span', 'rk', String(t.rank)));
-  nm.append(document.createTextNode(t.name));
-  return nm;
+/** Book against fair at every reading of a game: the series behind the range plot, the histogram and the lead. */
+function series(g) {
+  if (S.memo.has(g.id)) return S.memo.get(g.id);
+  const pre = preOf(g);
+  const out = pre && S.model ? readingsOf(g).filter((r) => r[1] >= 2 && r[1] <= 40).map((r) => { const m = S.model.judge(pre, r[1], r[2], r[3], r[4], r[5]).markets.total; return { t: r[1], gap: m.edge, book: m.line, fair: m.fair, over: m.over }; }) : [];
+  S.memo.set(g.id, out);
+  return out;
 }
 
-function gameRow(g, i) {
-  const st = standing(g), row = h('button', 'game-row'), [text, cls] = word(g, st);
-  row.type = 'button';
-  row.dataset.id = g.id;
-  if (cls === 'is-over' || cls === 'is-under') row.classList.add(cls);
-  if (i === S.cursor) row.classList.add('is-cursor');
-  const teams = h('span', 'c-teams');
-  teams.append(teamCell(g.away), h('span', 'pt', g.away.pts), teamCell(g.home), h('span', 'pt', g.home.pts));
-  const m = st ? st.markets.total : null;
-  const num = (label, value, kind) => { const c = h('span', `c-num ${kind}`); c.append(h('span', 'lb', label), document.createTextNode(value)); return c; };
-  const line = h('span', 'c-line');
-  const bar = h('span', 'c-bar'); bar.append(gapBar(m ? m.edge : null, RULES.buyEdge));
-  const strong = m && m.edge != null && Math.abs(m.edge) >= RULES.buyEdge;
-  line.append(num('Book', m ? f1(m.line) : '–', 'book'), num('Fair', m ? f1(m.fair) : '–', 'fair'), bar, h('span', `c-gap${strong ? (m.edge > 0 ? ' is-over' : ' is-under') : ''}`, m ? signed(m.edge) : '–'));
-  const tt = h('span', 'c-tt');
-  if (st && st.markets.away.edge != null) {
-    tt.append(document.createTextNode(`${g.away.abbr} `), h('b', '', signed(st.markets.away.edge)), document.createTextNode(`  ${g.home.abbr} `), h('b', '', signed(st.markets.home.edge)));
-  }
-  const pre = preOf(g), sp = h('span', 'c-spark');
-  sp.append(spark(pre && S.model ? readingsOf(g).map((r) => { const j = S.model.judge(pre, r[1], r[2], r[3], r[4], r[5]).markets.total; return [r[1], j.edge]; }) : []));
-  const read = h('span', 'c-read'); read.append(h('span', `say ${cls}`, text));
-  row.append(h('span', 'c-clock', g.detail.replace(' - ', ' ')), teams, line, tt, sp, read);
-  row.addEventListener('click', () => go(gameHash(g.id, st && st.best ? st.best.key : 'total')));
+const clockText = (g) => (g.state === 'post' ? 'Final' : g.detail.replace(' - ', ' ').replace('Halftime', 'Half'));
+
+function teamLine(t, other, played) {
+  const row = h('span', `tm${played && t.pts > other.pts ? ' is-ahead' : ''}`), nm = h('span', 'nm');
+  nm.append(document.createTextNode(t.name));
+  if (t.rank) nm.append(h('span', 'rk', String(t.rank)));
+  row.append(nm, h('span', 'pt', played ? t.pts : ''));
   return row;
 }
 
-const heat = (g) => { const st = standing(g); if (!st) return -1; const big = Math.max(...['total', 'away', 'home'].map((k) => Math.abs(st.markets[k].edge || 0))); return (st.best ? st.best.weight * 100 : 0) + big; };
+function standRow(g, i) {
+  const st = g.state === 'in' ? standing(g) : null, s = series(g), last = s[s.length - 1] || null;
+  const m = st && st.fresh && st.markets.total.line != null ? st.markets.total : null;
+  const now = m ? { gap: m.edge, book: m.line, fair: m.fair, over: m.over } : last;
+  const [text, cls] = word(g, st);
+  const row = h('a', `stand-row${g.state === 'post' ? ' is-final' : ''}${i === S.cursor ? ' is-cursor' : ''}`);
+  row.href = gameHash(g.id, st && st.best ? st.best.key : 'total');
+  row.dataset.id = g.id;
+  const game = h('span', 'c-game'); game.append(teamLine(g.away, g.home, true), teamLine(g.home, g.away, true));
+  const gaps = s.map((p) => p.gap).concat(now ? [now.gap] : []);
+  const plot = h('span', 'c-plot');
+  plot.append(rangePlot({ gap: now ? now.gap : null, lo: gaps.length ? Math.min(...gaps) : null, hi: gaps.length ? Math.max(...gaps) : null, signal: !!(st && st.best && st.best.weight === 3 && st.best.key === 'total'), threshold: RULES.buyEdge }));
+  const nums = h('span', 'c-nums');
+  const num = (label, value, kind) => { const c = h('span', `c-num ${kind}`, value); c.dataset.l = label; return c; };
+  nums.append(num('Book', now ? f1(now.book) : '–', 'book'), num('Fair', now ? f1(now.fair) : '–', 'fair'), num('Gap', now ? signed(now.gap) : '–', 'gap'), num('Over', now && now.over != null ? `${Math.round(now.over * 100)}%` : '–', 'over'));
+  row.append(game, h('span', 'c-clock', clockText(g)), plot, nums, h('span', `c-status ${cls}`, text));
+  return row;
+}
+
+const heat = (g) => { const st = standing(g); if (!st) return -1; const big = Math.max(...['total', 'away', 'home'].map((k) => Math.abs(st.markets[k].edge || 0))); return (st.best ? st.best.weight * 100 : 0) + (st.eligible ? 50 : 0) + big; };
+
+/** The rows of the board, in order: live games with a line by how much is going on, then finished games whose line was recorded. */
+function standGames() {
+  const all = [...S.games.values()];
+  const live = all.filter((g) => g.state === 'in' && preOf(g)).sort((a, b) => heat(b) - heat(a));
+  if (S.only) return live.filter((g) => { const st = standing(g); return st && st.best; });
+  const done = all.filter((g) => g.state === 'post' && series(g).length).sort((a, b) => Math.abs(series(b).at(-1).gap) - Math.abs(series(a).at(-1).gap));
+  return live.concat(done);
+}
 
 function schedRow(g, right) {
   const b = h('button'); b.type = 'button';
@@ -229,31 +247,73 @@ function schedRow(g, right) {
   return b;
 }
 
-function liveRows() {
-  const live = [...S.games.values()].filter((g) => g.state === 'in').sort((a, b) => heat(b) - heat(a));
-  return S.only ? live.filter((g) => { const st = standing(g); return st && st.best; }) : live;
+/** The slate in one finding: how far the book ran from fair, which way it missed, and whether anything held. */
+function renderLead(all) {
+  const gaps = [], plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  let signals = 0, measured = 0;
+  for (const g of all) {
+    const s = series(g).filter((p) => p.t >= RULES.measureFrom && p.t <= RULES.measureTo);
+    if (!s.length) continue;
+    measured += 1;
+    for (const p of s) gaps.push(p.gap);
+    const pre = preOf(g);
+    if (Math.abs(pre[1]) < RULES.blowoutSpread) signals += S.model.signalsFor(pre, readingsOf(g), g.state === 'post' ? { away: g.away.pts, home: g.home.pts } : null).length;
+  }
+  const st = gapStats(gaps, RULES.buyEdge), live = all.filter((g) => g.state === 'in').length, ahead = all.filter((g) => g.state === 'pre').sort((a, b) => new Date(a.start) - new Date(b.start));
+  let head, sub;
+  if (!S.scoresAt) [head, sub] = ['Loading the slate.', ''];
+  else if (!st.n && !all.length) [head, sub] = ['No games on this date.', ''];
+  else if (!st.n && isToday() && live) [head, sub] = [`${plural(live, 'game')} in progress. The first lines are coming in.`, 'The figures fill in as DraftKings posts live totals. Each game is measured from minute 4.'];
+  else if (!st.n && ahead.length && !all.some((g) => g.state === 'post')) [head, sub] = [`${plural(ahead.length, 'game')} on the slate. The first tips at ${timeLabel(ahead[0].start)}.`, 'The board fills in at tip-off. Each game is measured from minute 4.'];
+  else if (!st.n && isToday() && ahead.length) [head, sub] = [`${plural(ahead.length, 'game')} still to tip. The next is at ${timeLabel(ahead[0].start)}.`, 'No live line has been recorded yet today. Each game is measured from minute 4.'];
+  else if (!st.n) [head, sub] = ['No live lines were recorded for this slate.', 'ESPN drops the live line at the final whistle, so a slate can only be measured while the recorder is running.'];
+  else {
+    const when = isToday() ? 'today' : `on ${new Date(toUTC(S.date)).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })}`;
+    const lean = st.high >= 3 && st.high >= 2 * st.low ? ' When it missed, it was mostly too high.' : st.low >= 3 && st.low >= 2 * st.high ? ' When it missed, it was mostly too low.' : st.high + st.low < 3 ? ' It rarely missed by much.' : ' It missed in both directions.';
+    head = `DraftKings’ live total ${isToday() ? 'has sat' : 'sat'} ${st.abs.toFixed(1)} points from fair ${when}.${lean}`;
+    sub = `A cold-stretch buy needs the book to be too low. That was true on ${st.low.toFixed(1)}% of ${plural(st.n, 'reading')}. ${signals ? `${plural(signals, 'signal')} held for two readings in a row.` : 'No gap has held for two readings in a row, so the record for this slate is empty.'}`;
+  }
+  $('#lead-head').textContent = head;
+  $('#lead-sub').textContent = sub; $('#lead-sub').hidden = !sub;
+  $('#fig-abs').textContent = st.n ? st.abs.toFixed(1) : '–';
+  $('#fig-low').textContent = st.n ? `${st.low.toFixed(1)}%` : '–';
+  $('#fig-high').textContent = st.n ? `${st.high.toFixed(1)}%` : '–';
+  $('#fig-sig').textContent = st.n ? String(signals) : '–';
+  $('#hist-title').textContent = st.n ? `All ${plural(st.n, 'reading')}` : 'All readings';
+  $('#hist-note').textContent = st.n ? `Every recorded line between minute ${RULES.measureFrom} and minute ${RULES.measureTo}, across ${plural(measured, 'game')}.` : 'The distribution fills in as lines are recorded.';
+  return gaps;
+}
+
+/** Drawn last, once the layout around it has settled, so the chart is built at the width it will be shown at. */
+function renderHistogram(gaps) {
+  const host = $('#hist'), key = `${S.date}:${gaps.length}:${host.clientWidth}`;
+  if (!gaps.length) { host.replaceChildren(); S.histKey = null; return; }
+  if (S.histKey === key) return;
+  histogram(host, gaps, { threshold: RULES.buyEdge });
+  S.histKey = key;
 }
 
 function renderBoard() {
   $('#day').textContent = dayLabel(S.date);
   $('#only').setAttribute('aria-pressed', String(S.only));
-  const all = [...S.games.values()], nLive = all.filter((g) => g.state === 'in').length, rows = liveRows();
-  $('#live-count').textContent = nLive ? ` ${nLive}` : '';
-  const lined = rows.filter((g) => preOf(g)), unlined = rows.length - lined.length;
-  $('#board-rows').replaceChildren(...lined.map(gameRow));
-  $('#board-wrap').hidden = !lined.length;
-  $('#board-unlined').hidden = !unlined;
+  const all = [...S.games.values()], nLive = all.filter((g) => g.state === 'in').length, rows = standGames();
+  const gaps = renderLead(all);
+  $('#stand-rows').replaceChildren(...rows.map(standRow));
+  $('#stand').hidden = !rows.length;
+  const unlined = all.filter((g) => g.state === 'in' && !preOf(g)).length;
+  $('#board-unlined').hidden = !unlined || S.only;
   $('#board-unlined').textContent = `${unlined} more in progress with no DraftKings line, so nothing to measure.`;
   const empty = $('#board-empty');
   empty.hidden = rows.length > 0;
-  empty.textContent = !S.scoresAt ? 'Loading the scoreboard.' : !nLive ? (isToday() ? 'No games in progress. The board fills in at tip-off.' : 'No games in progress on this date.') : 'No signals right now. An empty board is a valid result.';
+  empty.textContent = !S.scoresAt ? 'Loading the scoreboard.' : S.only ? 'No signals right now. An empty board is a valid result.' : nLive ? 'Games are in progress, but none has a DraftKings line yet.' : isToday() ? 'No games in progress. The board fills in at tip-off.' : 'No lines were recorded on this date.';
   const next = all.filter((g) => g.state === 'pre').sort((a, b) => new Date(a.start) - new Date(b.start));
   $('#next-rows').replaceChildren(...next.map((g) => schedRow(g, g.pre ? `${g.pre[0]}, ${g.pre[1] <= 0 ? g.home.abbr : g.away.abbr} by ${Math.abs(g.pre[1])}` : 'No line')));
   $('#next').hidden = !next.length;
-  const taped = (g) => ((S.recorded.get(g.id) || {}).r || []).length;
-  const done = all.filter((g) => g.state === 'post').sort((a, b) => taped(b) - taped(a));
-  $('#final-rows').replaceChildren(...done.map((g) => schedRow(g, `${g.away.pts}-${g.home.pts}${taped(g) ? ', line recorded' : ''}`)));
+  const done = all.filter((g) => g.state === 'post' && !series(g).length);
+  $('#final-rows').replaceChildren(...done.map((g) => schedRow(g, `${g.away.pts}–${g.home.pts}`)));
+  $('#finals-sum').textContent = `${done.length} finished game${done.length === 1 ? '' : 's'} with no line recorded`;
   $('#finals').hidden = !done.length;
+  renderHistogram(gaps);
 }
 
 /* ---------- game ---------- */
@@ -283,13 +343,14 @@ function sentence(g, st, k, book) {
 
 function renderGame() {
   const g = S.games.get(S.sel);
+  $('#back').href = boardHash(S.date);
   $('#game-none').hidden = !!g;
   $('#game-body').hidden = !g;
   if (!g) { $('#game-none').textContent = S.sel && !S.scoresAt ? 'Loading the game.' : 'Pick a game from the board.'; return; }
   const k = S.market, pre = preOf(g), st = standing(g), book = readingsOf(g);
   const side = (id, t, short) => {
     const tm = h('div', 'tm'); if (t.rank) tm.append(h('span', 'rk', String(t.rank))); tm.append(document.createTextNode(t.name));
-    $(id).replaceChildren(tm, h('div', 'beh', short == null || g.state === 'pre' ? '' : short >= 0 ? `${f1(short)} behind pace` : `${f1(-short)} ahead`));
+    $(id).replaceChildren(tm, h('div', 'beh', short == null || g.state === 'pre' ? '' : short >= 0 ? `${f1(short)} behind pace` : `${f1(-short)} ahead of pace`));
   };
   side('#side-away', g.away, st ? st.fair.awayShort : null);
   side('#side-home', g.home, st ? st.fair.homeShort : null);
@@ -307,7 +368,9 @@ function renderGame() {
   const lastRec = pre && book.length && S.model ? S.model.judge(pre, ...book[book.length - 1].slice(1, 6)).markets[k] : null;
   const shown = g.state === 'in' && m && m.line != null ? m : g.state !== 'pre' ? lastRec : null;
   const preK = pre ? (k === 'total' ? pre[0] : k === 'away' ? pre[0] / 2 + pre[1] / 2 : pre[0] / 2 - pre[1] / 2) : null;
-  $('#f-book-l').textContent = k === 'total' ? 'DraftKings live' : 'DraftKings, implied';
+  const lastLine = g.state === 'post' ? ', last line' : '';
+  $('#f-book-l').textContent = (k === 'total' ? 'DraftKings live' : 'DraftKings, implied') + lastLine;
+  $('#f-fair-l').textContent = g.state === 'post' ? 'Fair, at that reading' : 'Fair';
   $('#f-book').textContent = shown ? f1(shown.line) : '–';
   $('#f-fair').textContent = g.state === 'pre' ? f1(preK) : g.state === 'post' ? (lastRec ? f1(lastRec.fair) : '–') : m ? f1(m.fair) : '–';
   $('#f-gap').textContent = shown ? signed(shown.edge) : '–';
@@ -316,6 +379,7 @@ function renderGame() {
   $('#f-pre').textContent = f1(preK);
   const paceK = st && g.state === 'in' ? (k === 'total' ? st.fair.paceTotal : k === 'away' ? st.fair.paceAway : st.fair.paceHome) : null;
   $('#f-pace').textContent = f1(paceK);
+  for (const id of ['#f-over', '#f-pace']) $(id).parentElement.hidden = g.state !== 'in';
 
   const host = $('#chart'), scrub = $('#scrub');
   const tl = (g.timeline || [{ t: 0, a: 0, h: 0 }]).filter((p) => p.t <= 40).slice();
@@ -327,15 +391,15 @@ function renderGame() {
   }
   const paceKey = k === 'total' ? 'paceTotal' : k === 'away' ? 'paceAway' : 'paceHome';
   const fairPts = [], pacePts = [];
-  for (const p of tl) { if (p.t < 2) continue; const f = S.model.fair(pre, p.t, p.a, p.h); fairPts.push({ t: p.t, v: f[k] }); if (f[paceKey] != null) pacePts.push({ t: p.t, v: f[paceKey] }); }
-  const bookPts = book.filter((r) => r[1] <= 40).map((r) => { const j = S.model.judge(pre, r[1], r[2], r[3], r[4], r[5]).markets[k]; return { t: r[1], v: j.line, fair: j.fair }; });
+  for (const p of tl) { if (p.t < 2) continue; const f = S.model.fair(pre, p.t, p.a, p.h); fairPts.push({ t: p.t, v: f[k] }); if (f[paceKey] != null && p.t >= 6) pacePts.push({ t: p.t, v: f[paceKey] }); }
+  const bookPts = book.filter((r) => r[1] >= 2 && r[1] <= 40).map((r) => { const j = S.model.judge(pre, r[1], r[2], r[3], r[4], r[5]).markets[k]; return { t: r[1], v: j.line, fair: j.fair }; });
   const finals = g.state === 'post' ? { away: g.away.pts, home: g.home.pts } : null;
   const signals = S.model.signalsFor(pre, book, finals);
   const share = [[0, 0]]; for (let t = 2; t <= 38; t += 1) share.push([t, S.model.share(t)]); share.push([40, 1]);
   const idle = () => { scrub.textContent = 'Drag across the chart to read any minute.'; };
   gameChart(host, {
     pregame: preK, preAway: pre[0] / 2 + pre[1] / 2, preHome: pre[0] / 2 - pre[1] / 2, final: finals ? (k === 'total' ? finals.away + finals.home : finals[k]) : null,
-    fair: fairPts, pace: pacePts, book: bookPts, flow: tl, share, signals: signals.filter((s) => s.market === k),
+    fair: fairPts, pace: pacePts, book: bookPts, flow: tl, share, signals: signals.filter((s) => s.market === k), awayName: g.away.name, homeName: g.home.name,
     onScrub(p) {
       if (!p) { idle(); return; }
       scrub.replaceChildren(h('b', '', `${clockLabel(p.t)}  ${p.a}-${p.h}`));
@@ -362,6 +426,9 @@ function renderRecord() {
   const tally = (rows) => { const w = rows.filter((s) => s.result === 'Won').length, l = rows.filter((s) => s.result === 'Lost').length; return w + l ? `${w}–${l}` : '–'; };
   const settled = L.filter((s) => s.result === 'Won' || s.result === 'Lost');
   const units = settled.reduce((u, s) => u + (s.result === 'Won' ? (s.price > 0 ? s.price / 100 : 100 / -s.price) : -1), 0);
+  const won = settled.filter((s) => s.result === 'Won').length, open = L.length - settled.length;
+  $('#rec-head').textContent = !L.length ? 'No signal has fired yet.' : `${L.length} signal${L.length === 1 ? '' : 's'} so far: ${won} won, ${settled.length - won} lost${open ? `, ${open} still open` : ''}.`;
+  document.querySelector('.sums').hidden = !L.length;
   $('#r-all').textContent = tally(L);
   $('#r-units').textContent = settled.length ? signed(units) : '–';
   $('#r-units').className = settled.length && units > 0 ? 'is-over' : settled.length && units < 0 ? 'is-under' : '';
@@ -369,7 +436,7 @@ function renderRecord() {
   $('#r-under').textContent = tally(L.filter((s) => s.side === 'Under'));
   $('#days-rows').replaceChildren(...S.index.slice().reverse().map((d) => {
     const tr = document.createElement('tr'); tr.tabIndex = 0;
-    for (const [v, c] of [[dayLabel(d.date)], [d.games, 'r'], [d.readings, 'r'], [d.gap_abs == null ? '–' : d.gap_abs.toFixed(1), 'r'], [d.below == null ? '–' : `${d.below}%`, 'r'], [d.above == null ? '–' : `${d.above}%`, 'r']]) tr.append(h('td', c || '', v));
+    for (const [v, c] of [[dayLabel(d.date)], [d.games, 'r'], [d.total_readings == null ? d.readings : d.total_readings, 'r'], [d.gap_abs == null ? '–' : d.gap_abs.toFixed(1), 'r'], [d.below == null ? '–' : `${d.below}%`, 'r'], [d.above == null ? '–' : `${d.above}%`, 'r']]) tr.append(h('td', c || '', v));
     const open = () => go(boardHash(d.date));
     tr.addEventListener('click', open); tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
     return tr;
@@ -396,7 +463,7 @@ function renderPulse() {
   const rec = S.recordedAt ? `, recorder ${Math.max(0, Math.round((Date.now() / 1000 - S.recordedAt) / 60))} min ago` : '';
   p.replaceChildren(h('b', '', isToday() ? `${live} live` : dayLabel(S.date)), document.createTextNode(`, scores ${age}s ago`), h('span', 'wide', rec));
 }
-function render() { renderPulse(); if (S.view === 'board') renderBoard(); if (S.view === 'game') renderGame(); if (S.view === 'record') renderRecord(); }
+function render() { S.memo.clear(); renderPulse(); if (S.view === 'board') renderBoard(); if (S.view === 'game') renderGame(); if (S.view === 'record') renderRecord(); }
 
 async function refresh(force) {
   if (S.busy && !force) return;
@@ -423,15 +490,15 @@ $('#today').addEventListener('click', () => go(boardHash(today())));
 $('#only').addEventListener('click', () => { S.only = !S.only; renderBoard(); });
 window.addEventListener('hashchange', applyRoute);
 let resizeTimer = 0;
-window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (S.view === 'game') renderGame(); }, 120); });
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (S.view === 'game') renderGame(); if (S.view === 'board') renderBoard(); }, 120); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) store.save(); else refresh(); });
 document.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
   if (S.view === 'board') {
-    const rows = liveRows().filter((g) => preOf(g));
+    const rows = standGames();
     if (e.key === 'j' || e.key === 'ArrowDown') { S.cursor = Math.min(rows.length - 1, S.cursor + 1); renderBoard(); e.preventDefault(); }
     else if (e.key === 'k' || e.key === 'ArrowUp') { S.cursor = Math.max(0, S.cursor - 1); renderBoard(); e.preventDefault(); }
-    else if (e.key === 'Enter' && rows[S.cursor] && e.target === document.body) go(gameHash(rows[S.cursor].id, 'total'));
+    else if (e.key === 'Enter' && rows[S.cursor] && e.target === document.body) go(gameHash(rows[S.cursor].id, 'total', S.date));
     else if (e.key === '[') go(boardHash(shiftDay(S.date, -1)));
     else if (e.key === ']') go(boardHash(shiftDay(S.date, 1)));
     else if (e.key === 't') go(boardHash(today()));

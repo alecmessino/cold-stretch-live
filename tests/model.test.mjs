@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createModel, elapsed, clockLabel, isClockGlitch, RULES } from '../js/model.js';
+import { createModel, elapsed, clockLabel, isClockGlitch, gapStats, RULES } from '../js/model.js';
 
 const root = new URL('..', import.meta.url);
 const model = createModel(JSON.parse(readFileSync(new URL('model.json', root))));
@@ -80,4 +80,13 @@ test('no signals in blowouts, on huge spreads, or outside the window', () => {
   assert.equal(judgeAt([150, -RULES.blowoutSpread], 20, 30, 32), null);
   assert.equal(judgeAt([150, 0], RULES.firstMinute - 1, 5, 6), null);
   assert.equal(judgeAt([150, 0], RULES.lastMinute + 1, 60, 62), null);
+});
+
+test('gap summary: average distance and the share of readings beyond the threshold on each side', () => {
+  assert.deepEqual(gapStats([]), { n: 0, abs: null, low: null, high: null });
+  const s = gapStats([0, 1, -1, 2.5, -2.5, -4, 3, -3], 2.5);
+  assert.equal(s.n, 8);
+  close(s.abs, 17 / 8, 'average distance');
+  close(s.low, 25, 'book low: +2.5 and +3');
+  close(s.high, 37.5, 'book high: -2.5, -4 and -3');
 });

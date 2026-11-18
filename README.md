@@ -4,7 +4,7 @@ A live board for one question about college basketball totals: **when a team goe
 
 **Open it:** https://alecmessino.github.io/cold-stretch-live/
 
-Every in-progress Division I game is shown with DraftKings' live total next to a fair final-score estimate for the game as it stands. Open a game to see how the book's number, the fair number and the raw pace have moved minute by minute, above the score flow for both teams. A recorder saves every game's live line as it happens, and a ledger settles each signal against the final score.
+The board opens with the slate in one sentence: how far DraftKings' live total has run from a fair final-score estimate, and which way it missed. Under it, every game with a line sits on one scale, fair minus book, with a dot for the latest reading and a bar for the range so far. Open a game to see the book's number and the fair number minute by minute, above the score flow for both teams. A recorder saves every game's live line as it happens, and a ledger settles each signal against the final score.
 
 ## How it works
 
@@ -28,11 +28,12 @@ There is no server. The page reads ESPN directly; the only stored data is what t
 | `index.html`, `css/app.css` | The page. |
 | `js/model.js` | The model and the signal rules. Pure functions, shared with the tests. |
 | `js/espn.js` | Fetching and parsing ESPN's feeds. |
-| `js/charts.js` | The gap bar, the sparkline and the two-pane game chart. |
+| `js/charts.js` | The range plot, the histogram and the two-pane game chart. |
 | `js/app.js` | State, polling, routing and rendering. |
 | `model.json` | Coefficients by game minute, and the distribution used for chances. |
 | `recorder/record.py` | The recorder. Standard library only. |
-| `tests/` | Model parity between JavaScript and Python, parsers against real ESPN responses, recorder behaviour. |
+| `fonts/`, `vendor/` | IBM Plex Sans, Newsreader and d3, served from this site. No third-party requests except ESPN and the recorded data. |
+| `tests/` | Model parity between JavaScript and Python, parsers against real ESPN responses, recorder behaviour, palette contrast. |
 
 ## The fair number
 
@@ -57,6 +58,14 @@ Game totals are settled at DraftKings' live price. Team totals are implied from 
 
 Readings where the game clock runs faster than the wall clock, or backwards, are dropped. ESPN's clock does that occasionally.
 
+## Design
+
+Two colours carry meaning and nothing else does. Orange is the sportsbook's number, blue is the fair number.
+
+- **Colour.** Orange against blue stays far apart for red-green colour blindness, where red against green nearly collapses. Every text colour clears 4.5 to 1 against every surface, and body text clears 7 to 1. `tests/tokens.test.mjs` checks all of it against `css/app.css`, so a colour change that breaks legibility fails the build.
+- **Type.** IBM Plex Sans for text and figures: its numerals are tabular by default, so columns align without a feature flag, and its width axis tightens number rows on a phone. Newsreader for headlines, with its optical-size axis so large sizes get the display cut.
+- **Marks.** The book is always a stepped line (a posted number that jumps), fair is always a continuous one, so the two read apart without colour.
+
 ## Keys
 
 | Where | Key | Does |
@@ -78,7 +87,7 @@ python3 -m http.server 8000
 ```
 
 ```sh
-node --test tests/model.test.mjs tests/espn.test.mjs
+node --test tests/model.test.mjs tests/espn.test.mjs tests/tokens.test.mjs
 python3 -m unittest discover -s tests
 python3 recorder/record.py --out store --minutes 5     # record five minutes of live games into ./store
 ```
