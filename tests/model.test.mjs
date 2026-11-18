@@ -1,0 +1,83 @@
+// node --test tests/
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createModel, elapsed, clockLabel, isClockGlitch, RULES } from '../js/model.js';
+
+const root = new URL('..', import.meta.url);
+const model = createModel(JSON.parse(readFileSync(new URL('model.json', root))));
+const parity = JSON.parse(readFileSync(new URL('tests/fixtures/parity.json', root)));
+const close = (a, b, msg) => assert.ok(Math.abs(a - b) < 1e-9, `${msg}: ${a} vs ${b}`);
+
+test('matches the Python recorder on every fixture case', () => {
+  for (const c of parity.cases) {
+    const j = model.judge(c.pre, c.t, c.away, c.home, c.book_total, c.book_spread);
+    close(j.fair.away, c.fair_away, 'fair away');
+    close(j.fair.home, c.fair_home, 'fair home');
+    close(j.fair.awayShort, c.away_short, 'away shortfall');
+    close(j.fair.homeShort, c.home_short, 'home shortfall');
+    close(j.markets.total.over, c.over_total, 'over chance, total');
+    close(j.markets.away.over, c.over_away, 'over chance, away');
+    close(j.markets.home.over, c.over_home, 'over chance, home');
+  }
+});
+
+test('reads ESPN clocks', () => {
+  for (const c of parity.clocks) close(elapsed(c.period, c.clock), c.minute, `${c.period} ${c.clock}`);
+  assert.equal(clockLabel(12.5), '1H 7:30');
+  assert.equal(clockLabel(27.77), '2H 12:14');
+});
+
+test('the fair number lands on the score at the final whistle', () => {
+  const f = model.fair([149.5, -3.5], 40, 71, 78);
+  assert.equal(f.away, 71);
+  assert.equal(f.home, 78);
+});
+
+test('a team behind its pace is expected to finish under its pregame total, not catch up', () => {
+  const pre = [150, 0];
+  const cold = model.fair(pre, 20, 22, 35);
+  assert.ok(cold.awayShort > 10);
+  assert.ok(cold.away < 75 - 8, `cold team fair ${cold.away}`);
+  assert.ok(cold.away > 22 + (75 - 35.2) * 0.9, 'but it scores at about its normal rate from here');
+});
+
+test('drops readings whose game clock outruns the wall clock or runs backwards', () => {
+  const at730 = [1000, 12.5], at507 = [1030, 14.88], at701 = [1060, 12.98], next = [1090, 13.0];
+  assert.equal(isClockGlitch(null, at730), false);
+  assert.equal(isClockGlitch(at730, at507), true, '2.4 game minutes in 30 seconds');
+  assert.equal(isClockGlitch(at730, at701), false);
+  assert.equal(isClockGlitch(at507, at701), true, 'backwards');
+  assert.equal(isClockGlitch(at701, next), false);
+});
+
+test('a signal needs two qualifying readings in a row, fires once, and settles on the final', () => {
+  const pre = [150, 0];
+  const fairAt = (t, a, h) => model.fair(pre, t, a, h).total;
+  const low = (t, a, h) => Math.round((fairAt(t, a, h) - 6) * 2) / 2; // book six points under fair: a clear over
+  const fine = (t, a, h) => Math.round(fairAt(t, a, h) * 2) / 2;
+  const r = (ts, t, a, h, line) => [ts, t, a, h, line, 0, -110, -110];
+  const oneOff = [r(0, 10, 15, 15, fine(10, 15, 15)), r(60, 11, 17, 15, low(11, 17, 15)), r(120, 12, 17, 17, fine(12, 17, 17))];
+  assert.equal(model.signalsFor(pre, oneOff, null).filter((s) => s.market === 'total').length, 0, 'a single reading is not a signal');
+  const held = [r(0, 10, 15, 15, fine(10, 15, 15)), r(60, 11, 17, 15, low(11, 17, 15)), r(120, 12, 17, 17, low(12, 17, 17)), r(180, 13, 19, 17, low(13, 19, 17))];
+  const open = model.signalsFor(pre, held, null).filter((s) => s.market === 'total');
+  assert.equal(open.length, 1);
+  assert.equal(open[0].side, 'Over');
+  assert.equal(open[0].minute, 12, 'it fires on the second reading');
+  assert.equal(open[0].result, 'Pending');
+  assert.equal(open[0].priced, 'DraftKings');
+  const line = open[0].line;
+  const won = model.signalsFor(pre, held, { away: Math.ceil(line / 2) + 1, home: Math.ceil(line / 2) + 1 }).find((s) => s.market === 'total');
+  const lost = model.signalsFor(pre, held, { away: Math.floor(line / 2) - 2, home: Math.floor(line / 2) - 2 }).find((s) => s.market === 'total');
+  assert.equal(won.result, 'Won');
+  assert.equal(lost.result, 'Lost');
+});
+
+test('no signals in blowouts, on huge spreads, or outside the window', () => {
+  const judgeAt = (pre, t, a, h) => { const f = model.fair(pre, t, a, h).total; return model.judge(pre, t, a, h, f - 8, a - h).markets.total.signal; };
+  assert.equal(judgeAt([150, 0], 20, 30, 32), 'buy');
+  assert.equal(judgeAt([150, 0], 20, 20, 20 + RULES.blowoutLead), null);
+  assert.equal(judgeAt([150, -RULES.blowoutSpread], 20, 30, 32), null);
+  assert.equal(judgeAt([150, 0], RULES.firstMinute - 1, 5, 6), null);
+  assert.equal(judgeAt([150, 0], RULES.lastMinute + 1, 60, 62), null);
+});

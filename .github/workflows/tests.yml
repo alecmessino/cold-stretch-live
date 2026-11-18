@@ -1,0 +1,19 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Model (JavaScript) against the recorder's arithmetic
+        run: node --test tests/model.test.mjs tests/espn.test.mjs
+      - name: Recorder (Python)
+        run: python3 -m unittest discover -s tests -v

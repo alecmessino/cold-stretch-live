@@ -2,542 +2,148 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0b0e12">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cold Stretch Live</title>
-<link rel="icon" href="data:,">
-<style>
-:root{--bg:#0b0e12;--panel:#12171d;--panel2:#171d25;--line:#232c37;--fg:#e8ecf1;--mut:#8a96a6;--dim:#5d6877;--book:#f4f6f8;--fair:#4cb3ff;--away:#4cb3ff;--home:#ffa94d;--ok:#3ddc97;--bad:#ff6b6b;--warn:#ffcc66;--grid:#1c242e;--r:10px;
-  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;--mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace}
-@media (prefers-color-scheme:light){:root{--bg:#f6f7f9;--panel:#fff;--panel2:#f1f3f6;--line:#dfe3e9;--fg:#10151b;--mut:#5b6675;--dim:#8a94a3;--book:#10151b;--fair:#0a72c9;--away:#0a72c9;--home:#c96a0a;--ok:#0f9960;--bad:#d03b3b;--warn:#a87400;--grid:#e9ecf1}}
-*{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:15px;line-height:1.4;-webkit-text-size-adjust:100%}
-[hidden]{display:none !important}
-.num{font-family:var(--mono);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
-.wrap{max-width:1180px;margin:0 auto;padding:0 14px 60px}
-.top{position:sticky;top:0;z-index:5;background:var(--bg);border-bottom:1px solid var(--line)}
-.top-in{max-width:1180px;margin:0 auto;padding:10px 14px 0;display:flex;flex-direction:column;gap:8px}
-.brand{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
-.brand h1{margin:0;font-size:14px;letter-spacing:.12em;font-weight:700;white-space:nowrap}
-.brand h1 b{color:var(--ok);font-weight:700}
-.status{font-size:12px;color:var(--mut);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:1}
-.dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--dim);margin-right:6px;vertical-align:middle}
-.dot.on{background:var(--ok);box-shadow:0 0 0 3px color-mix(in srgb,var(--ok) 25%,transparent)}
-.dot.err{background:var(--bad)}
-.tabs{display:flex;gap:4px}
-.tabs button{flex:1;font:inherit;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);background:none;border:0;border-bottom:2px solid transparent;padding:10px 4px;cursor:pointer}
-.tabs button.on{color:var(--fg);border-bottom-color:var(--ok)}
-h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--mut);font-weight:600;margin:22px 0 8px}
-.sub{color:var(--mut);font-size:12.5px;margin:0 0 10px}
-.bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:14px 0 4px;flex-wrap:wrap}
-.step{display:flex;align-items:center;gap:6px}
-.btn{font:inherit;font-size:13px;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 12px;min-height:38px;cursor:pointer}
-.btn.on{border-color:var(--ok);color:var(--ok)}
-.cards{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
-@media (min-width:760px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
-@media (min-width:1100px){.cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
-.card{display:flex;flex-direction:column;gap:10px;text-align:left;width:100%;font:inherit;color:inherit;background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;cursor:pointer}
-.card.buy-over{border-color:var(--ok);box-shadow:inset 3px 0 0 var(--ok)}
-.card.buy-under{border-color:var(--bad);box-shadow:inset 3px 0 0 var(--bad)}
-.card.lean{border-color:var(--warn)}
-.card-h{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:12px;color:var(--mut)}
-.chip{font-size:11px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;padding:3px 9px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
-.chip.over{color:var(--ok)}.chip.under{color:var(--bad)}.chip.lean{color:var(--warn)}.chip.none{color:var(--dim)}
-.teams{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 12px;align-items:baseline}
-.teams .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
-.teams .t i{font-style:normal;color:var(--mut);font-weight:400;font-size:12px;margin-right:5px}
-.teams .s{font-family:var(--mono);font-size:20px;font-variant-numeric:tabular-nums;text-align:right}
-.mk{display:grid;grid-template-columns:minmax(0,1.3fr) repeat(3,minmax(0,1fr));gap:4px 8px;font-size:12.5px;align-items:baseline}
-.mk .hd{color:var(--dim);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase}
-.mk .lb{color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mk .v{font-family:var(--mono);font-variant-numeric:tabular-nums;text-align:right}
-.pos{color:var(--ok)}.neg{color:var(--bad)}.mut{color:var(--mut)}
-.flag{font-size:12px;color:var(--mut)}
-.rowlist{display:flex;flex-direction:column;border:1px solid var(--line);border-radius:var(--r);overflow:hidden;background:var(--panel)}
-.rowlist button{display:grid;grid-template-columns:74px minmax(0,1fr) auto;gap:10px;align-items:center;width:100%;text-align:left;font:inherit;font-size:13.5px;color:inherit;background:none;border:0;border-bottom:1px solid var(--line);padding:10px 12px;cursor:pointer}
-.rowlist button:last-child{border-bottom:0}
-.rowlist .tm{color:var(--mut);font-size:12px;font-family:var(--mono)}
-.rowlist .mm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.rowlist .rt{color:var(--mut);font-family:var(--mono);font-size:12.5px;white-space:nowrap}
-.empty{color:var(--mut);border:1px dashed var(--line);border-radius:var(--r);padding:16px;font-size:13.5px}
-.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:14px}
-.ghead{display:flex;flex-direction:column;gap:10px}
-.gscore{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:10px}
-.gscore .tn{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.gscore .tn.r{text-align:right}
-.gscore .sc{font-family:var(--mono);font-size:30px;font-variant-numeric:tabular-nums;white-space:nowrap}
-.gscore .sc small{font-size:12px;color:var(--mut);display:block;text-align:center;font-family:var(--sans)}
-.seg{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.seg button{font:inherit;font-size:13px;min-height:40px;padding:6px 8px;border:0;background:var(--panel);color:var(--mut);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.seg button+button{border-left:1px solid var(--line)}
-.seg button.on{background:var(--fg);color:var(--bg);font-weight:600}
-.tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
-@media (min-width:700px){.tiles{grid-template-columns:repeat(4,minmax(0,1fr))}}
-.tile{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:3px;min-width:0}
-.tile b{font-family:var(--mono);font-size:26px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.1}
-.tile span{font-size:11.5px;color:var(--mut)}
-.verdict{display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:13.5px}
-.legend{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;color:var(--mut);margin:0 0 6px}
-.legend span{display:inline-flex;align-items:center;gap:6px}
-.sw{display:inline-block;width:16px;height:3px;border-radius:2px}
-.sw.d{height:0;border-top:2px dashed var(--mut)}
-.chart{position:relative;min-height:280px}
-.chart svg{display:block;overflow:visible}
-.chart text{font-family:var(--mono);font-size:11px;fill:var(--mut)}
-.chart text.s{fill:var(--fg);font-weight:600}
-.tip{position:absolute;pointer-events:none;z-index:3;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;min-width:160px;box-shadow:0 6px 20px rgba(0,0,0,.35)}
-.tip div{display:flex;justify-content:space-between;gap:14px;font-family:var(--mono)}
-.tip div:first-child{color:var(--mut);margin-bottom:3px}
-.grid2{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
-@media (min-width:980px){.grid2{grid-template-columns:repeat(2,minmax(0,1fr))}}
-.scroll{overflow-x:auto}
-table{width:100%;border-collapse:collapse;font-size:12.5px}
-th{text-align:left;color:var(--mut);font-weight:600;font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
-td{padding:9px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
-td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
-tr.pick{cursor:pointer}
-.note{color:var(--mut);font-size:12px;margin:8px 0 0}
-details{margin-top:18px;color:var(--mut);font-size:12.5px}
-details summary{cursor:pointer;color:var(--fg);font-weight:600}
-details p{margin:8px 0 0;max-width:70ch}
-</style>
+<meta name="description" content="Live college basketball totals: every game's score flow, DraftKings' live line and a fair final-score estimate, side by side.">
+<meta name="theme-color" content="#101826" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f6f9" media="(prefers-color-scheme: light)">
+<meta property="og:title" content="Cold Stretch Live">
+<meta property="og:description" content="Does the book's live total drop too far when a team goes cold? Every game, tracked.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23101826'/%3E%3Cpath d='M5 16h22' stroke='%2326344a' stroke-width='2'/%3E%3Cpath d='M16 6v20' stroke='%237cc4ff' stroke-width='3'/%3E%3Cpath d='M9 9v14' stroke='%23ffb020' stroke-width='4'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
+<link rel="stylesheet" href="css/app.css">
 </head>
 <body>
-<header class="top"><div class="top-in">
-  <div class="brand"><h1>COLD STRETCH <b>LIVE</b></h1><div class="status"><span class="dot" id="dot"></span><span id="status">Starting</span></div></div>
-  <nav class="tabs"><button data-tab="live" class="on">Live</button><button data-tab="game">Game</button><button data-tab="record">Record</button></nav>
-</div></header>
-<div class="wrap">
 
-<section id="tab-live">
-  <div class="bar">
-    <div class="step"><button class="btn" id="prev" aria-label="Previous day">&larr;</button><span class="num" id="date">—</span><button class="btn" id="next" aria-label="Next day">&rarr;</button><button class="btn" id="today">Today</button></div>
-    <button class="btn" id="only">Signals only</button>
+<header class="mast">
+  <div class="mast-in">
+    <div class="mast-top">
+      <h1 class="wordmark">Cold Stretch Live</h1>
+      <p class="pulse" id="pulse" role="status" aria-live="polite">Loading</p>
+    </div>
+    <nav class="nav" aria-label="Views">
+      <button type="button" data-view="board" aria-current="page">Board</button>
+      <button type="button" data-view="game">Game</button>
+      <button type="button" data-view="record">Record</button>
+    </nav>
   </div>
-  <p class="sub" id="live-sub">Scores from ESPN. Lines are DraftKings’ live total and spread as ESPN publishes them. Fair is the model’s final-score estimate right now.</p>
-  <h2 id="h-live">In progress</h2>
-  <div class="cards" id="board"></div>
-  <div class="empty" id="board-empty" hidden>No games in progress.</div>
-  <h2 id="h-next">Up next</h2>
-  <div class="rowlist" id="upnext"></div>
-  <h2 id="h-final">Final</h2>
-  <div class="rowlist" id="finals"></div>
-</section>
+</header>
 
-<section id="tab-game" hidden>
-  <div class="empty" id="game-empty">Pick a game from the Live tab.</div>
-  <div id="game-body" hidden>
-    <div class="panel ghead" style="margin-top:14px">
-      <div class="gscore"><div class="tn" id="g-away">—</div><div class="sc"><span id="g-score">—</span><small id="g-clock">—</small></div><div class="tn r" id="g-home">—</div></div>
-      <div class="seg" id="mkt"><button data-mkt="total" class="on">Game total</button><button data-mkt="away" id="mk-away">Away</button><button data-mkt="home" id="mk-home">Home</button></div>
-      <div class="verdict"><span class="chip none" id="g-chip">—</span><span class="mut" id="g-why">—</span></div>
-    </div>
-    <div class="tiles" style="margin-top:10px">
-      <div class="tile"><b id="g-book">—</b><span id="g-book-l">DraftKings live</span></div>
-      <div class="tile"><b id="g-fair">—</b><span>Fair right now</span></div>
-      <div class="tile"><b id="g-gap">—</b><span>Fair minus book</span></div>
-      <div class="tile"><b id="g-chance">—</b><span>Chance of the over</span></div>
-    </div>
-    <div class="grid2" style="margin-top:12px">
-      <div class="panel">
-        <h2 style="margin-top:0">Projected final, minute by minute</h2>
-        <p class="legend"><span><i class="sw" style="background:var(--book)"></i>DraftKings live</span><span><i class="sw" style="background:var(--fair)"></i>Fair</span><span><i class="sw d"></i>If the pace held</span><span><i class="sw d" style="border-color:var(--dim)"></i>Pregame</span></p>
-        <div class="chart" id="c-proj"></div>
-        <p class="note" id="g-note">—</p>
+<main class="page">
+
+  <section id="view-board">
+    <div class="tool">
+      <div class="tool-l">
+        <button type="button" class="key" id="prev" aria-label="Previous day">&#8249;</button>
+        <span class="day" id="day">–</span>
+        <button type="button" class="key" id="next-day" aria-label="Next day">&#8250;</button>
+        <button type="button" class="key" id="today">Today</button>
       </div>
-      <div class="panel">
-        <h2 style="margin-top:0">Game flow</h2>
-        <p class="legend"><span><i class="sw" style="background:var(--away)"></i><span id="lg-away">Away</span></span><span><i class="sw" style="background:var(--home)"></i><span id="lg-home">Home</span></span><span><i class="sw d"></i>Pregame pace</span></p>
-        <div class="chart" id="c-flow"></div>
-        <p class="note" id="g-pace">—</p>
+      <button type="button" class="key" id="only" aria-pressed="false">Signals only</button>
+    </div>
+    <p class="lede">Each row sets DraftKings’ live total against a fair final score for the game as it stands. On the bar, the blue line is fair and the amber mark is the book: left of the line the book is low, right of it the book is high.</p>
+
+    <h2 class="head">In progress<span id="live-count"></span></h2>
+    <div id="board-wrap" hidden>
+      <div class="board">
+        <div class="board-head" aria-hidden="true">
+          <span>Clock</span><span>Game</span><span class="r">Book</span><span class="r">Fair</span><span>Book against fair</span><span class="r">Gap</span><span class="h-tt">Team totals, gap</span><span class="h-spark">Gap so far</span><span>Read</span>
+        </div>
+        <div id="board-rows"></div>
       </div>
     </div>
-    <h2>Signals in this game</h2>
-    <div class="scroll panel"><table><thead><tr><th>Market</th><th>Side</th><th>Clock</th><th>Score</th><th class="n">Line</th><th class="n">Fair</th><th class="n">Chance</th><th class="n">Final</th><th>Result</th></tr></thead><tbody id="g-sigs"></tbody></table><p class="note" id="g-nosig" hidden>None. An empty board is a valid result.</p></div>
-  </div>
-</section>
+    <p class="quiet small" id="board-unlined" hidden></p>
+    <p class="vacant" id="board-empty">Loading the scoreboard.</p>
 
-<section id="tab-record" hidden>
-  <p class="sub" style="margin-top:14px">Every signal the recorder has logged, settled against the final score. A signal is the first moment a market sat 2.5+ points from fair with a 62%+ chance on two readings in a row, between minute 4 and minute 34, blowouts excluded. Game totals use DraftKings’ live price. Team totals are implied from the live total and spread and priced at an assumed -115.</p>
-  <div class="tiles">
-    <div class="tile"><b id="r-rec">—</b><span>Won–lost, all signals</span></div>
-    <div class="tile"><b id="r-units">—</b><span>Units, risking 1 per signal</span></div>
-    <div class="tile"><b id="r-over">—</b><span>Overs (your thesis)</span></div>
-    <div class="tile"><b id="r-under">—</b><span>Unders (book above fair)</span></div>
-  </div>
-  <h2>How close is the book</h2>
-  <div class="scroll panel"><table><thead><tr><th>Slate</th><th class="n">Games</th><th class="n">Readings</th><th class="n">Avg distance</th><th class="n">Book 2.5+ under fair</th><th class="n">Book 2.5+ over fair</th></tr></thead><tbody id="r-days"></tbody></table><p class="note" id="r-nodays" hidden>Nothing recorded yet.</p></div>
-  <h2>Ledger</h2>
-  <div class="scroll panel"><table><thead><tr><th>Slate</th><th>Game</th><th>Market</th><th>Side</th><th>Clock</th><th>Score</th><th class="n">Line</th><th class="n">Price</th><th class="n">Fair</th><th class="n">Chance</th><th class="n">Final</th><th>Result</th></tr></thead><tbody id="r-ledger"></tbody></table><p class="note" id="r-noledger" hidden>No signals logged yet.</p></div>
-  <details><summary>What the numbers mean and what they don’t</summary>
-    <p>Fair is the current score plus a rest-of-game estimate fitted on 16,086 Division I games from 2022–23 through December 2025. It uses the closing total and spread, how far each team is ahead of or behind the pace those lines implied, and the lead.</p>
-    <p>The model knows nothing about injuries, foul trouble or who is on the floor. A large gap can mean the book knows something. ESPN’s feeds are unofficial and can lag or change. This is information, not advice.</p>
-  </details>
-</section>
+    <div id="next" hidden>
+      <h2 class="head">Up next</h2>
+      <div class="sched" id="next-rows"></div>
+    </div>
+    <div id="finals" hidden>
+      <h2 class="head">Final</h2>
+      <div class="sched" id="final-rows"></div>
+    </div>
+  </section>
 
-</div>
-<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
-<script>
-(() => {
-  'use strict';
-  const $ = (s) => document.querySelector(s);
-  const $$ = (s) => [...document.querySelectorAll(s)];
-  const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
-  const f1 = (v) => (v == null || !isFinite(v) ? '—' : Number(v).toFixed(1));
-  const sgn = (v) => (v == null || !isFinite(v) ? '—' : (v > 0 ? '+' : '') + Number(v).toFixed(1));
-  const BUY_P = 0.62, LEAN_P = 0.57, MIN_EDGE = 2.5, LEAN_EDGE = 1.5, T0 = 4, T1 = 34, BLOW_LEAD = 15, BLOW_SPREAD = 20, STALE_MS = 100000;
-  const SB = (d) => `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=${d}&groups=50&limit=400&_=${Date.now()}`;
-  const OD = (id) => `https://sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball/events/${id}/competitions/${id}/odds?limit=20&_=${Date.now()}`;
-  const SUM = (id) => `https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/summary?event=${id}&_=${Date.now()}`;
-  const DATA = (() => {
-    const q = new URLSearchParams(location.search).get('data'); if (q) return q.replace(/\/?$/, '/');
-    const m = location.hostname.match(/^(.+)\.github\.io$/), repo = location.pathname.split('/')[1];
-    return m && repo ? `https://raw.githubusercontent.com/${m[1]}/${repo}/data/` : 'data/';
-  })();
-  const slateOf = (ms) => new Date(ms - 36e5 * 10).toISOString().slice(0, 10).replace(/-/g, '');
-  const shift = (d, n) => { const t = Date.UTC(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8)) + n * 864e5; return new Date(t).toISOString().slice(0, 10).replace(/-/g, ''); };
-  const pretty = (d) => new Date(Date.UTC(+d.slice(0, 4), +d.slice(4, 6) - 1, +d.slice(6, 8))).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' });
-  const S = { date: slateOf(Date.now()), games: new Map(), sel: null, mkt: 'total', tab: 'live', only: false, rec: new Map(), ledger: [], index: [], model: null, lastOk: 0, err: null };
-  const isToday = () => S.date === slateOf(Date.now());
-  const getJSON = async (u) => { const r = await fetch(u, { cache: 'no-store' }); if (!r.ok) throw new Error(`${r.status}`); return r.json(); };
+  <section id="view-game" hidden>
+    <p class="vacant" id="game-none" style="margin-top:18px">Pick a game from the board.</p>
+    <div id="game-body" hidden>
+      <div class="score">
+        <div class="side" id="side-away"></div>
+        <div class="mid"><span class="pts" id="pts-away">–</span><span class="clk" id="clock"></span><span class="pts" id="pts-home">–</span></div>
+        <div class="side is-home" id="side-home"></div>
+      </div>
+      <div class="markets" id="markets" role="group" aria-label="Market">
+        <button type="button" data-market="total" aria-pressed="true">Game total</button>
+        <button type="button" data-market="away" aria-pressed="false" id="mk-away">Away</button>
+        <button type="button" data-market="home" aria-pressed="false" id="mk-home">Home</button>
+      </div>
+      <p class="read" id="read"></p>
+      <dl class="facts">
+        <div class="book"><dt id="f-book-l">DraftKings live</dt><dd id="f-book">–</dd></div>
+        <div class="fair"><dt>Fair</dt><dd id="f-fair">–</dd></div>
+        <div><dt>Fair minus book</dt><dd id="f-gap">–</dd></div>
+        <div><dt>Chance of the over</dt><dd id="f-over">–</dd></div>
+        <div><dt>Pregame</dt><dd id="f-pre">–</dd></div>
+        <div><dt>If this pace held</dt><dd id="f-pace">–</dd></div>
+      </dl>
+      <p class="legend">
+        <span><i class="k-book"></i>DraftKings live</span><span><i class="k-fair"></i>Fair</span><span><i class="k-pace"></i>If the pace held</span><span><i class="k-pre"></i>Pregame</span>
+        <span><i class="k-away"></i><span id="lg-away">Away</span></span><span><i class="k-home"></i><span id="lg-home">Home</span></span>
+      </p>
+      <p class="scrub" id="scrub" aria-live="off"></p>
+      <div class="chart" id="chart"></div>
 
-  /* ---------- model ---------- */
-  function coef(t) {
-    t = Math.min(38, Math.max(2, t)); const lo = Math.min(37, Math.floor(t)), w = t - lo, a = S.model.rows.get(lo), b = S.model.rows.get(lo + 1), o = {};
-    Object.keys(a).forEach((k) => { o[k] = a[k] + (b[k] - a[k]) * w; }); return o;
-  }
-  function rest(c, tt0, ott0, p, o) {
-    const e = tt0 * c.share, short = e - p, osh = ott0 * c.share - o, lead = p - o;
-    const r = c.b0 + c.b_erem * (tt0 - e) + c.b_short * short + c.b_oshort * osh + c.b_lead * Math.max(lead, 0) + c.b_trail * Math.max(-lead, 0) + c.b_lead12 * Math.max(lead - 12, 0) + c.b_trail12 * Math.max(-lead - 12, 0);
-    return [Math.max(0, r), short];
-  }
-  function cdf(z) {
-    const c = S.model.cdf; if (z <= c[0][0]) return c[0][1]; if (z >= c[c.length - 1][0]) return c[c.length - 1][1];
-    let i = 1; while (c[i][0] < z) i += 1; const a = c[i - 1], b = c[i]; return a[1] + (b[1] - a[1]) * (z - a[0]) / (b[0] - a[0]);
-  }
-  // pre = [closing total, home spread]; returns fair finals, pace and shortfalls at elapsed minute t
-  function fair(pre, t, a, hh) {
-    const ht0 = pre[0] / 2 - pre[1] / 2, at0 = pre[0] / 2 + pre[1] / 2, c = coef(t), k = t <= 38 ? 1 : Math.max(0, (40 - t) / 2);
-    const [hr, hs] = rest(c, ht0, at0, hh, a), [ar, sa] = rest(c, at0, ht0, a, hh);
-    const pace = (p) => (t >= 4 ? p / c.share : null);
-    return { away: a + ar * k, home: hh + hr * k, total: a + ar * k + hh + hr * k, sAway: sa, sHome: hs, pAway: pace(a), pHome: pace(hh), pTotal: t >= 4 ? (a + hh) / c.share : null, sdTeam: c.sd_team, sdTotal: c.sd_total, at0, ht0 };
-  }
-  // one reading against the model: per market, the line, fair, edge and chance of the over, plus the signal it earns
-  function judge(pre, t, a, hh, bt, bs) {
-    const f = fair(pre, t, a, hh), out = { f, mk: {} };
-    const lines = bt == null || bs == null ? null : { total: bt, away: bt / 2 + bs / 2, home: bt / 2 - bs / 2 };
-    const inWin = t >= T0 && t <= T1 && Math.abs(a - hh) < BLOW_LEAD && Math.abs(pre[1]) < BLOW_SPREAD;
-    ['total', 'away', 'home'].forEach((k) => {
-      const fv = f[k], sd = k === 'total' ? f.sdTotal : f.sdTeam, m = { fair: fv, line: lines ? lines[k] : null, edge: null, p: null, sig: null, side: null };
-      if (lines) {
-        m.edge = fv - m.line; m.p = 1 - cdf((m.line - fv) / sd);
-        const side = m.edge >= 0 ? 'Over' : 'Under', p = side === 'Over' ? m.p : 1 - m.p, e = Math.abs(m.edge);
-        m.side = side; m.ps = p;
-        if (inWin && p >= BUY_P && e >= MIN_EDGE) m.sig = 'buy'; else if (inWin && p >= LEAN_P && e >= LEAN_EDGE) m.sig = 'lean';
-      }
-      out.mk[k] = m;
-    });
-    return out;
-  }
-  const elapsed = (period, clock) => { const m = /^(\d+):(\d+(?:\.\d+)?)$/.exec(clock || ''); const left = m ? +m[1] + +m[2] / 60 : (parseFloat(clock) || 0) / 60; return period >= 3 ? 40 : ((period || 1) - 1) * 20 + (20 - left); };
-  const clockOf = (t) => { const half = t <= 20 ? 1 : 2, left = Math.max(0, half * 20 - t); return `${half === 1 ? '1H' : '2H'} ${Math.floor(left)}:${String(Math.round((left % 1) * 60) % 60).padStart(2, '0')}`; };
+      <h2 class="head">Signals in this game</h2>
+      <div class="sheet" id="sig-sheet">
+        <table>
+          <thead><tr><th>Market</th><th>Side</th><th>Clock</th><th>Score</th><th class="r">Line</th><th class="r">Fair</th><th class="r">Chance</th><th class="r">Final</th><th>Result</th></tr></thead>
+          <tbody id="sig-rows"></tbody>
+        </table>
+      </div>
+      <p class="quiet small" id="sig-none" hidden>None. An empty list is a valid result.</p>
+    </div>
+  </section>
 
-  /* ---------- data ---------- */
-  function readEvent(e) {
-    const c = e.competitions[0], cs = {}; c.competitors.forEach((x) => { cs[x.homeAway] = x; });
-    const team = (s) => ({ name: cs[s].team.shortDisplayName || cs[s].team.location || cs[s].team.abbreviation, rank: cs[s].curatedRank && cs[s].curatedRank.current <= 25 ? cs[s].curatedRank.current : null, pts: Math.round(+cs[s].score || 0) });
-    const o = (c.odds || [])[0], st = e.status;
-    return { id: e.id, state: st.type.state, detail: st.type.shortDetail || '', period: st.period || 0, clock: st.displayClock, start: e.date, away: team('away'), home: team('home'),
-      t: elapsed(st.period, st.displayClock), sbPre: o && o.overUnder != null && o.spread != null ? [+o.overUnder, +o.spread] : null };
-  }
-  async function loadBoard() {
-    const date = S.date, d = await getJSON(SB(date)); if (date !== S.date) return;
-    const seen = new Set();
-    (d.events || []).forEach((e) => {
-      const n = readEvent(e), g = S.games.get(n.id) || { r: [], plays: null, pre: null, live: null };
-      Object.assign(g, n); if (!g.pre && n.sbPre) g.pre = n.sbPre; S.games.set(n.id, g); seen.add(n.id);
-    });
-    [...S.games.keys()].forEach((k) => { if (!seen.has(k)) S.games.delete(k); });
-    S.lastOk = Date.now(); S.err = null;
-  }
-  async function loadOdds(g) {
-    const d = await getJSON(OD(g.id)); let live = null;
-    (d.items || []).forEach((it) => {
-      const pid = String((it.provider || {}).id), ou = it.overUnder, sp = it.spread; if (ou == null || sp == null) return;
-      if (pid === '100') g.pre = [+ou, +sp];
-      if (pid === '200') { const cur = it.current || {}; live = { bt: +ou, bs: +sp, op: cur.over ? parseFloat(cur.over.american) : null, up: cur.under ? parseFloat(cur.under.american) : null, at: Date.now() }; }
-    });
-    g.oddsAt = Date.now();
-    if (g.state === 'in') {
-      g.live = live;
-      if (g.period <= 2) {
-        const rd = [Math.round(Date.now() / 1000), +g.t.toFixed(2), g.away.pts, g.home.pts, live ? live.bt : null, live ? live.bs : null, live ? live.op : null, live ? live.up : null];
-        const last = g.r[g.r.length - 1], glitch = last && ((rd[1] - last[1]) * 60 > rd[0] - last[0] + 15 || rd[1] < last[1] - 0.05);   // the game clock cannot outrun the wall clock
-        if (!glitch && (!last || rd.slice(1).join() !== last.slice(1).join())) g.r.push(rd);
-      }
-    }
-  }
-  async function pool(items, n, fn) { const q = items.slice(); await Promise.all(Array.from({ length: Math.min(n, q.length) }, async () => { while (q.length) { const it = q.shift(); try { await fn(it); } catch (e) { /* one game failing must not stop the rest */ } } })); }
-  async function loadRecorded() {
-    try { const d = await getJSON(`${DATA}tracks/${S.date}.json?_=${Math.floor(Date.now() / 60000)}`); const m = new Map(); (d.games || []).forEach((g) => m.set(g.id, g)); S.rec = m; S.recAt = d.updated || null; } catch (e) { S.rec = new Map(); S.recAt = null; }
-  }
-  async function loadRecord() {
-    try { S.ledger = await getJSON(`${DATA}ledger.json?_=${Math.floor(Date.now() / 60000)}`); } catch (e) { S.ledger = []; }
-    try { S.index = await getJSON(`${DATA}index.json?_=${Math.floor(Date.now() / 60000)}`); } catch (e) { S.index = []; }
-  }
-  async function loadPlays(g) {
-    const d = await getJSON(SUM(g.id)), tl = [{ t: 0, a: 0, h: 0 }];
-    (d.plays || []).forEach((p) => {
-      if (p.awayScore == null || p.homeScore == null || !p.period || !p.clock) return;
-      const t = elapsed(p.period.number, p.clock.displayValue), last = tl[tl.length - 1];
-      if (p.awayScore !== last.a || p.homeScore !== last.h || t - last.t >= 1) tl.push({ t, a: p.awayScore, h: p.homeScore });
-    });
-    g.plays = tl; g.playsAt = Date.now();
-    if (!g.pre) { const pc = (d.pickcenter || []).find((p) => p.overUnder != null && p.spread != null); if (pc) g.pre = [+pc.overUnder, +pc.spread]; }
-  }
-  // recorder readings and this browser's readings, merged on time
-  function readings(g) {
-    const rec = (S.rec.get(g.id) || {}).r || [], all = rec.concat(g.r).filter((r) => r[4] != null && r[5] != null).sort((a, b) => a[0] - b[0]), out = [];
-    all.forEach((r) => { const l = out[out.length - 1]; if (!l || r[0] - l[0] >= 20) out.push(r); });
-    return out;
-  }
-  const preOf = (g) => g.pre || (S.rec.get(g.id) || {}).pre || null;
-  function nowOf(g) {
-    const pre = preOf(g); if (!pre || !S.model) return null;
-    const fresh = g.state === 'in' && g.live && Date.now() - g.live.at < STALE_MS;
-    const j = judge(pre, g.t, g.away.pts, g.home.pts, fresh ? g.live.bt : null, fresh ? g.live.bs : null);
-    // a buy must hold on two readings in a row; until then it shows as a lean
-    const prior = g.r.length > 1 ? g.r[g.r.length - 2] : null, pj = prior && prior[4] != null && g.r[g.r.length - 1][0] - prior[0] < 150 ? judge(pre, prior[1], prior[2], prior[3], prior[4], prior[5]) : null;
-    ['total', 'away', 'home'].forEach((k) => { const m = j.mk[k]; if (m.sig === 'buy' && !(pj && pj.mk[k].sig === 'buy' && pj.mk[k].side === m.side)) m.sig = 'lean'; });
-    let best = null; ['total', 'away', 'home'].forEach((k) => { const m = j.mk[k]; if (m.sig && (!best || (m.sig === 'buy' && best.sig !== 'buy') || (m.sig === best.sig && m.ps > best.ps))) best = Object.assign({ k }, m); });
-    return Object.assign(j, { best, fresh, pre });
-  }
-  function signalsOf(g) {
-    const pre = preOf(g); if (!pre || !S.model) return [];
-    const fired = new Set(), out = [], fin = g.state === 'post' ? { total: g.away.pts + g.home.pts, away: g.away.pts, home: g.home.pts } : null;
-    let prev = {};
-    readings(g).forEach((r) => {
-      const j = judge(pre, r[1], r[2], r[3], r[4], r[5]), cur = {};
-      ['total', 'away', 'home'].forEach((k) => {
-        const m = j.mk[k]; if (m.sig === 'buy') cur[k] = m.side;
-        if (m.sig !== 'buy' || prev[k] !== m.side || fired.has(k + m.side)) return; fired.add(k + m.side);
-        const final = fin ? fin[k] : null;
-        out.push({ k, market: k === 'total' ? 'Game total' : `${g[k].name} team total`, side: m.side, t: r[1], score: `${r[2]}-${r[3]}`, line: m.line, fair: m.fair, chance: Math.round(m.ps * 100), final,
-          result: final == null ? 'Pending' : final === m.line ? 'Push' : (final > m.line) === (m.side === 'Over') ? 'Won' : 'Lost' });
-      });
-      prev = cur;
-    });
-    return out;
-  }
+  <section id="view-record" hidden>
+    <p class="lede">Every signal the recorder has logged, settled against the final score. A signal is the first time a market sits 2.5 or more points from fair, with at least a 62% chance, on two readings in a row. Minutes 4 to 34 only, and never in a blowout.</p>
+    <dl class="sums">
+      <div><dt>Won–lost</dt><dd id="r-all">–</dd></div>
+      <div><dt>Units, 1 risked per signal</dt><dd id="r-units">–</dd></div>
+      <div><dt>Overs: book under fair</dt><dd id="r-over">–</dd></div>
+      <div><dt>Unders: book over fair</dt><dd id="r-under">–</dd></div>
+    </dl>
 
-  /* ---------- live board ---------- */
-  const tname = (t) => { const s = h('span', 't'); if (t.rank) s.append(h('i', '', `#${t.rank}`)); s.append(document.createTextNode(t.name)); return s; };
-  function card(g) {
-    const n = nowOf(g), b = h('button', 'card'); b.type = 'button';
-    const chip = h('span', 'chip none', '—');
-    if (n && n.best) { const o = n.best.side === 'Over'; if (n.best.sig === 'buy') { b.classList.add(o ? 'buy-over' : 'buy-under'); chip.className = `chip ${o ? 'over' : 'under'}`; chip.textContent = `${n.best.side} ${n.best.k === 'total' ? 'total' : g[n.best.k].name}`; } else { b.classList.add('lean'); chip.className = 'chip lean'; chip.textContent = `Lean ${n.best.side.toLowerCase()}`; } }
-    else if (!n) chip.textContent = 'No line';
-    else if (!n.fresh) chip.textContent = g.live ? 'Stale line' : 'No live line';
-    else chip.textContent = 'In line';
-    const hd = h('div', 'card-h'); hd.append(h('span', 'num', g.detail), chip);
-    const tm = h('div', 'teams'); tm.append(tname(g.away), h('span', 's', g.away.pts), tname(g.home), h('span', 's', g.home.pts));
-    b.append(hd, tm);
-    if (n) {
-      const mk = h('div', 'mk'); ['', 'Book', 'Fair', 'Gap'].forEach((x) => mk.append(h('span', 'hd' + (x ? ' v' : ''), x)));
-      [['total', 'Game total'], ['away', g.away.name], ['home', g.home.name]].forEach(([k, lab]) => {
-        const m = n.mk[k]; mk.append(h('span', 'lb', lab), h('span', 'v', f1(m.line)), h('span', 'v', f1(m.fair)), h('span', 'v ' + (m.edge == null ? 'mut' : m.edge >= MIN_EDGE ? 'pos' : m.edge <= -MIN_EDGE ? 'neg' : ''), sgn(m.edge)));
-      });
-      b.append(mk);
-      const cold = [[g.away, n.f.sAway], [g.home, n.f.sHome]].filter((x) => x[1] >= 4).map((x) => `${x[0].name} ${f1(x[1])} behind pace`);
-      if (cold.length && g.t >= 4) b.append(h('div', 'flag', cold.join(' · ')));
-    }
-    b.onclick = () => openGame(g.id);
-    return b;
-  }
-  const rank = (g) => { const n = nowOf(g); if (!n) return -1; const mx = Math.max(...['total', 'away', 'home'].map((k) => (n.mk[k].edge == null ? 0 : Math.abs(n.mk[k].edge)))); return (n.best ? (n.best.sig === 'buy' ? 200 : 100) : 0) + mx; };
-  function row(g, right) {
-    const b = h('button'); b.type = 'button'; const mm = h('span', 'mm');
-    mm.append(document.createTextNode(`${g.away.rank ? '#' + g.away.rank + ' ' : ''}${g.away.name} at ${g.home.rank ? '#' + g.home.rank + ' ' : ''}${g.home.name}`));
-    b.append(h('span', 'tm', g.state === 'pre' ? new Date(g.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : g.detail), mm, h('span', 'rt', right));
-    b.onclick = () => openGame(g.id); return b;
-  }
-  function drawLive() {
-    $('#date').textContent = pretty(S.date);
-    const all = [...S.games.values()], live = all.filter((g) => g.state === 'in').sort((a, b) => rank(b) - rank(a));
-    const shown = S.only ? live.filter((g) => { const n = nowOf(g); return n && n.best; }) : live;
-    $('#board').replaceChildren(...shown.map(card));
-    $('#board-empty').hidden = shown.length > 0;
-    $('#board-empty').textContent = !live.length ? (isToday() ? 'No games in progress right now.' : 'Nothing in progress on this date.') : 'No signals right now. An empty board is a valid result.';
-    $('#h-live').textContent = `In progress · ${live.length}`;
-    const pre = all.filter((g) => g.state === 'pre').sort((a, b) => new Date(a.start) - new Date(b.start));
-    $('#upnext').replaceChildren(...pre.map((g) => row(g, g.pre ? `O/U ${g.pre[0]}` : 'no line')));
-    $('#h-next').hidden = $('#upnext').hidden = !pre.length;
-    const fin = all.filter((g) => g.state === 'post').sort((a, b) => ((S.rec.get(b.id) || {}).r || []).length - ((S.rec.get(a.id) || {}).r || []).length);
-    $('#finals').replaceChildren(...fin.map((g) => row(g, `${g.away.pts}-${g.home.pts}${((S.rec.get(g.id) || {}).r || []).length ? ' · tape' : ''}`)));
-    $('#h-final').hidden = $('#finals').hidden = !fin.length;
-    $('#only').classList.toggle('on', S.only);
-  }
+    <h2 class="head">How close the book runs to fair</h2>
+    <div class="sheet" id="days-sheet">
+      <table>
+        <thead><tr><th>Slate</th><th class="r">Games</th><th class="r">Readings</th><th class="r">Average distance</th><th class="r">Book 2.5+ under fair</th><th class="r">Book 2.5+ over fair</th></tr></thead>
+        <tbody id="days-rows"></tbody>
+      </table>
+    </div>
+    <p class="quiet small" id="days-none" hidden>Nothing recorded yet.</p>
 
-  /* ---------- game view ---------- */
-  function tipFor(el) {
-    const t = h('div', 'tip'); t.hidden = true; el.append(t);
-    return { show(lines, px, py) { t.replaceChildren(...lines.map(([a, b]) => { const d = h('div'); d.append(h('span', '', a)); if (b != null) d.append(h('span', '', b)); return d; })); t.hidden = false; t.style.left = Math.max(0, Math.min(el.clientWidth - t.offsetWidth, px + 12)) + 'px'; t.style.top = Math.max(0, py - t.offsetHeight - 10) + 'px'; }, hide() { t.hidden = true; } };
-  }
-  function frame(el, H) { const W = Math.max(280, el.clientWidth); el.replaceChildren(); const svg = d3.select(el).append('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('width', '100%'); return { W, svg, tip: tipFor(el) }; }
-  function axes(svg, x, y, m, W, H, yt) {
-    svg.append('g').selectAll('line').data(yt).join('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y).attr('y2', y).style('stroke', 'var(--grid)');
-    svg.append('g').selectAll('text').data(yt).join('text').attr('x', m.l - 6).attr('y', y).attr('dy', '0.32em').attr('text-anchor', 'end').text((v) => v);
-    svg.append('g').selectAll('text').data([[0, 'Tip'], [10, '10'], [20, 'Half'], [30, '30'], [40, 'End']]).join('text').attr('x', (v) => x(v[0])).attr('y', H - 8).attr('text-anchor', (v, i) => (i === 0 ? 'start' : i === 4 ? 'end' : 'middle')).text((v) => v[1]);
-    svg.append('line').attr('x1', x(20)).attr('x2', x(20)).attr('y1', m.t).attr('y2', H - m.b).style('stroke', 'var(--grid)');
-  }
-  function flowOf(g) {
-    const tl = (g.plays || [{ t: 0, a: 0, h: 0 }]).filter((p) => p.t <= 40).slice(), last = tl[tl.length - 1];
-    readings(g).concat(g.r).sort((a, b) => a[0] - b[0]).forEach((r) => { const l = tl[tl.length - 1]; if (r[1] > l.t && (r[2] !== l.a || r[3] !== l.h)) tl.push({ t: r[1], a: r[2], h: r[3] }); });
-    if (g.state !== 'pre' && g.t <= 40 && g.t >= tl[tl.length - 1].t) tl.push({ t: g.t, a: g.away.pts, h: g.home.pts });
-    return last ? tl : [];
-  }
-  function drawProj(g, pre, flow, book, sigs) {
-    const el = $('#c-proj'), k = S.mkt, H = 300, m = { t: 16, r: 46, b: 26, l: 36 }, { W, svg, tip } = frame(el, H);
-    const fs = flow.filter((p) => p.t >= 2).map((p) => { const f = fair(pre, p.t, p.a, p.h); return { t: p.t, a: p.a, h: p.h, fair: f[k], pace: k === 'total' ? f.pTotal : k === 'away' ? f.pAway : f.pHome }; });
-    const bk = book.map((r) => { const j = judge(pre, r[1], r[2], r[3], r[4], r[5]).mk[k]; return { t: r[1], a: r[2], h: r[3], line: j.line, fair: j.fair, edge: j.edge }; });
-    const preV = k === 'total' ? pre[0] : k === 'away' ? pre[0] / 2 + pre[1] / 2 : pre[0] / 2 - pre[1] / 2, done = g.state === 'post', fin = k === 'total' ? g.away.pts + g.home.pts : g[k].pts;
-    const vals = [preV, ...fs.map((r) => r.fair), ...bk.map((r) => r.line)].concat(done ? [fin] : []), lo = d3.min(vals), hi = d3.max(vals), pad = Math.max(3, (hi - lo) * 0.12);
-    const x = d3.scaleLinear([0, 40], [m.l, W - m.r]), y = d3.scaleLinear([lo - pad, hi + pad], [H - m.b, m.t]);
-    axes(svg, x, y, m, W, H, y.ticks(5));
-    const cid = 'c' + Math.random().toString(36).slice(2, 8);
-    svg.append('clipPath').attr('id', cid).append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b);
-    const plot = svg.append('g').attr('clip-path', `url(#${cid})`);
-    plot.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(preV)).attr('y2', y(preV)).style('stroke', 'var(--dim)').style('stroke-dasharray', '5 4');
-    plot.append('path').attr('d', d3.line().x((r) => x(r.t)).y((r) => y(r.pace))(fs.filter((r) => r.pace != null))).style('fill', 'none').style('stroke', 'var(--mut)').style('stroke-dasharray', '4 4').style('opacity', 0.7);
-    for (let i = 0; i + 1 < bk.length; i += 1) {
-      const a = bk[i], b = bk[i + 1]; if (b.t <= a.t || b.t - a.t > 3) continue;
-      plot.append('path').attr('d', `M${x(a.t)},${y(a.line)}L${x(b.t)},${y(a.line)}L${x(b.t)},${y(b.fair)}L${x(a.t)},${y(a.fair)}Z`).style('fill', a.edge >= 0 ? 'var(--ok)' : 'var(--bad)').style('opacity', 0.18);
-    }
-    plot.append('path').attr('d', d3.line().x((r) => x(r.t)).y((r) => y(r.fair))(fs)).style('fill', 'none').style('stroke', 'var(--fair)').style('stroke-width', 2).style('stroke-linejoin', 'round');
-    plot.append('path').attr('d', d3.line().defined((r, i) => i === 0 || r.t - bk[i - 1].t <= 3).curve(d3.curveStepAfter).x((r) => x(r.t)).y((r) => y(r.line))(bk)).style('fill', 'none').style('stroke', 'var(--book)').style('stroke-width', 2.5);
-    svg.append('g').selectAll('path').data(sigs.filter((s) => s.k === k)).join('path').attr('d', d3.symbol(d3.symbolTriangle, 90))
-      .attr('transform', (s) => `translate(${x(s.t)},${y(s.line) + (s.side === 'Over' ? 13 : -13)}) rotate(${s.side === 'Over' ? 0 : 180})`).style('fill', (s) => (s.side === 'Over' ? 'var(--ok)' : 'var(--bad)')).style('stroke', 'var(--panel)');
-    const ends = [];
-    if (fs.length) ends.push({ y: y(fs[fs.length - 1].fair), x: x(fs[fs.length - 1].t), text: f1(fs[fs.length - 1].fair), c: 'var(--fair)' });
-    if (bk.length) ends.push({ y: y(bk[bk.length - 1].line), x: x(bk[bk.length - 1].t), text: f1(bk[bk.length - 1].line), c: 'var(--book)' });
-    if (done) { svg.append('circle').attr('cx', x(40)).attr('cy', y(fin)).attr('r', 5).style('fill', 'var(--book)').style('stroke', 'var(--panel)').style('stroke-width', 2); ends.push({ y: y(fin), x: x(40), text: `${fin}`, c: 'var(--book)' }); }
-    ends.sort((a, b) => a.y - b.y).forEach((e, i, arr) => { if (i && e.y - arr[i - 1].y < 12) e.y = arr[i - 1].y + 12; });
-    ends.forEach((e) => svg.append('text').attr('x', Math.min(e.x + 7, W - m.r + 7)).attr('y', e.y).attr('dy', '0.32em').attr('class', 's').style('fill', e.c).text(e.text));
-    const guide = svg.append('line').attr('y1', m.t).attr('y2', H - m.b).style('stroke', 'var(--dim)').style('display', 'none');
-    const near = (rows, t) => rows.reduce((b, r) => (b == null || Math.abs(r.t - t) < Math.abs(b.t - t) ? r : b), null);
-    svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).style('fill', 'transparent')
-      .on('pointermove', (ev) => {
-        const [px, py] = d3.pointer(ev), t = x.invert(px), b = near(bk, t), f = near(fs, t), ub = b && Math.abs(b.t - t) <= 1.5, r = ub ? b : f; if (!r) return;
-        guide.attr('x1', x(r.t)).attr('x2', x(r.t)).style('display', null);
-        const L = [[clockOf(r.t), `${r.a}-${r.h}`]]; if (ub) L.push(['DraftKings', f1(b.line)]); L.push(['Fair', f1(r.fair)]); if (ub) L.push(['Gap', sgn(b.edge)]); if (f && f.pace != null) L.push(['Pace', f1(f.pace)]); L.push(['Pregame', f1(preV)]);
-        tip.show(L, x(r.t), py);
-      }).on('pointerleave', () => { guide.style('display', 'none'); tip.hide(); });
-  }
-  function drawFlow(g, pre, flow) {
-    const el = $('#c-flow'), H = 280, m = { t: 16, r: 46, b: 26, l: 36 }, { W, svg, tip } = frame(el, H);
-    const at0 = pre[0] / 2 + pre[1] / 2, ht0 = pre[0] / 2 - pre[1] / 2, share = [[0, 0], ...[...S.model.rows.values()].map((r) => [r.minute, r.share]), [40, 1]];
-    const top = Math.max(at0, ht0, d3.max(flow, (p) => Math.max(p.a, p.h)) || 0) * 1.05, x = d3.scaleLinear([0, 40], [m.l, W - m.r]), y = d3.scaleLinear([0, top], [H - m.b, m.t]);
-    axes(svg, x, y, m, W, H, y.ticks(4));
-    [['a', at0, 'var(--away)'], ['h', ht0, 'var(--home)']].forEach(([k, tt, c]) => {
-      svg.append('path').attr('d', d3.line().x((s) => x(s[0])).y((s) => y(tt * s[1]))(share)).style('fill', 'none').style('stroke', c).style('stroke-dasharray', '4 4').style('opacity', 0.5);
-      svg.append('path').attr('d', d3.line().curve(d3.curveStepAfter).x((p) => x(p.t)).y((p) => y(p[k]))(flow)).style('fill', 'none').style('stroke', c).style('stroke-width', 2.5);
-    });
-    const end = flow[flow.length - 1], ends = [{ y: y(end.a), text: `${end.a}`, c: 'var(--away)' }, { y: y(end.h), text: `${end.h}`, c: 'var(--home)' }].sort((a, b) => a.y - b.y);
-    if (ends[1].y - ends[0].y < 12) ends[1].y = ends[0].y + 12;
-    ends.forEach((e) => svg.append('text').attr('x', x(end.t) + 7).attr('y', e.y).attr('dy', '0.32em').attr('class', 's').style('fill', e.c).text(e.text));
-    const guide = svg.append('line').attr('y1', m.t).attr('y2', H - m.b).style('stroke', 'var(--dim)').style('display', 'none');
-    const bh = (v) => (v >= 0 ? `${f1(v)} behind` : `${f1(-v)} ahead`);
-    svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).style('fill', 'transparent')
-      .on('pointermove', (ev) => {
-        const [px, py] = d3.pointer(ev), t = Math.max(0, Math.min(40, x.invert(px))), past = flow.filter((p) => p.t <= t), p = past.length ? past[past.length - 1] : flow[0], f = fair(pre, Math.max(2, t), p.a, p.h);
-        guide.attr('x1', x(t)).attr('x2', x(t)).style('display', null);
-        tip.show([[clockOf(t)], [`${g.away.name} ${p.a}`, bh(f.sAway)], [`${g.home.name} ${p.h}`, bh(f.sHome)]], x(t), py);
-      }).on('pointerleave', () => { guide.style('display', 'none'); tip.hide(); });
-  }
-  function drawGame() {
-    const g = S.sel ? S.games.get(S.sel) : null;
-    $('#game-empty').hidden = !!g; $('#game-body').hidden = !g; if (!g) return;
-    const pre = preOf(g), nm = (t) => `${t.rank ? '#' + t.rank + ' ' : ''}${t.name}`;
-    $('#g-away').textContent = nm(g.away); $('#g-home').textContent = nm(g.home); $('#mk-away').textContent = g.away.name; $('#mk-home').textContent = g.home.name; $('#lg-away').textContent = g.away.name; $('#lg-home').textContent = g.home.name;
-    $('#g-score').textContent = g.state === 'pre' ? 'vs' : `${g.away.pts} – ${g.home.pts}`; $('#g-clock').textContent = g.state === 'pre' ? new Date(g.start).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : g.detail;
-    $$('#mkt button').forEach((b) => b.classList.toggle('on', b.dataset.mkt === S.mkt));
-    const chip = $('#g-chip'), why = $('#g-why'), k = S.mkt, n = nowOf(g), book = readings(g), flow = flowOf(g), sigs = signalsOf(g);
-    $('#g-book-l').textContent = k === 'total' ? 'DraftKings live total' : 'DraftKings live, implied';
-    if (!pre) { chip.className = 'chip none'; chip.textContent = 'No line'; why.textContent = 'No DraftKings pregame line for this game, so there is no pace to measure against.'; ['#g-book', '#g-fair', '#g-gap', '#g-chance'].forEach((s) => { $(s).textContent = '—'; }); $('#c-proj').replaceChildren(); $('#c-flow').replaceChildren(); $('#g-note').textContent = '—'; $('#g-pace').textContent = '—'; $('#g-sigs').replaceChildren(); $('#g-nosig').hidden = false; return; }
-    const m = n ? n.mk[k] : null, lastBk = book.length ? judge(pre, book[book.length - 1][1], book[book.length - 1][2], book[book.length - 1][3], book[book.length - 1][4], book[book.length - 1][5]).mk[k] : null;
-    const showLive = g.state === 'in' && m && m.line != null;
-    $('#g-book').textContent = showLive ? f1(m.line) : lastBk ? f1(lastBk.line) : '—';
-    $('#g-fair').textContent = g.state === 'pre' ? f1(k === 'total' ? pre[0] : k === 'away' ? pre[0] / 2 + pre[1] / 2 : pre[0] / 2 - pre[1] / 2) : m ? f1(m.fair) : '—';
-    const gap = showLive ? m.edge : lastBk ? lastBk.edge : null; $('#g-gap').textContent = sgn(gap); $('#g-gap').className = gap == null ? '' : gap >= MIN_EDGE ? 'pos' : gap <= -MIN_EDGE ? 'neg' : '';
-    $('#g-chance').textContent = showLive ? `${Math.round(m.p * 100)}%` : '—';
-    chip.className = 'chip none'; chip.textContent = '—';
-    if (g.state === 'post') { chip.textContent = 'Final'; why.textContent = book.length ? `Replay with ${book.length} recorded readings of the live line.` : 'Replay. The live line was not recorded for this game, and ESPN drops it at the final whistle.'; }
-    else if (g.state === 'pre') { chip.textContent = 'Not started'; why.textContent = `DraftKings pregame: total ${pre[0]}, ${g.home.name} ${pre[1] > 0 ? '+' : ''}${pre[1]}.`; }
-    else if (!n.fresh) { chip.textContent = g.live ? 'Stale line' : 'No live line'; why.textContent = 'DraftKings is not showing a live line right now. No signal without a fresh line.'; }
-    else if (m.sig === 'buy') { chip.className = `chip ${m.side === 'Over' ? 'over' : 'under'}`; chip.textContent = `${m.side} ${f1(m.line)}`; why.textContent = `Fair ${f1(m.fair)}, ${Math.round(m.ps * 100)}% chance. ${m.side === 'Over' ? 'Book is under fair.' : 'Book is over fair.'}`; }
-    else if (m.sig === 'lean') { chip.className = 'chip lean'; chip.textContent = `Lean ${m.side.toLowerCase()}`; why.textContent = `Fair ${f1(m.fair)} against ${f1(m.line)}, ${Math.round(m.ps * 100)}% chance.`; }
-    else { chip.textContent = 'In line'; why.textContent = g.t < T0 || g.t > T1 ? 'Outside minutes 4 to 34, so no signals.' : Math.abs(g.away.pts - g.home.pts) >= BLOW_LEAD || Math.abs(pre[1]) >= BLOW_SPREAD ? 'Blowout or 20+ point spread. No signals.' : 'The book is within the model’s noise of fair.'; }
-    if (flow.length > 1 || book.length) { drawProj(g, pre, flow, book, sigs); drawFlow(g, pre, flow.length ? flow : [{ t: 0, a: 0, h: 0 }]); } else { $('#c-proj').replaceChildren(h('p', 'note', g.state === 'pre' ? 'Charts start at tip-off.' : 'Loading play-by-play.')); $('#c-flow').replaceChildren(); }
-    $('#g-note').textContent = k === 'total' ? (book.length ? `${book.length} readings of the live line. Green where the book is under fair, red where it is over.` : 'No readings of the live line yet for this game.') : 'Team totals are implied from DraftKings’ live total and spread. The posted team total can sit half a point either side.';
-    $('#g-pace').textContent = n && g.state !== 'pre' ? [[g.away, n.f.sAway], [g.home, n.f.sHome]].map(([t, s]) => `${t.name} ${s >= 0 ? f1(s) + ' behind' : f1(-s) + ' ahead of'} pace`).join(' · ') : '—';
-    $('#g-sigs').replaceChildren(...sigs.map((s) => { const tr = h('tr'); [[s.market], [s.side], [clockOf(s.t)], [s.score], [f1(s.line), 'n'], [f1(s.fair), 'n'], [`${s.chance}%`, 'n'], [s.final == null ? '' : s.final, 'n'], [s.result, s.result === 'Won' ? 'pos' : s.result === 'Lost' ? 'neg' : '']].forEach(([v, c]) => tr.append(h('td', c || '', v))); return tr; }));
-    $('#g-nosig').hidden = sigs.length > 0;
-  }
-  async function openGame(id) {
-    S.sel = id; setTab('game'); const g = S.games.get(id); if (!g) return;
-    drawGame();
-    try { const jobs = [loadPlays(g)]; if (!g.pre || g.state === 'in') jobs.push(loadOdds(g)); await Promise.all(jobs.map((p) => p.catch(() => {}))); } catch (e) { /* drawn with what we have */ }
-    if (S.sel === id) drawGame();
-  }
+    <h2 class="head">Ledger</h2>
+    <div class="sheet" id="ledger-sheet">
+      <table>
+        <thead><tr><th>Slate</th><th>Game</th><th>Market</th><th>Side</th><th>Clock</th><th>Score</th><th class="r">Line</th><th class="r">Price</th><th class="r">Fair</th><th class="r">Chance</th><th class="r">Final</th><th>Result</th></tr></thead>
+        <tbody id="ledger-rows"></tbody>
+      </table>
+    </div>
+    <p class="quiet small" id="ledger-none" hidden>No signals logged yet.</p>
+    <p class="quiet small">Game totals are settled at DraftKings’ live price. Team totals are implied from the live total and spread, and priced at an estimated -115.</p>
+  </section>
 
-  /* ---------- record ---------- */
-  function drawRecord() {
-    const L = S.ledger.slice().sort((a, b) => b.ts - a.ts), set = (rows) => { const w = rows.filter((s) => s.result === 'Won').length, l = rows.filter((s) => s.result === 'Lost').length; return rows.length ? `${w}–${l}` : '—'; };
-    const units = L.reduce((u, s) => u + (s.result === 'Won' ? (s.price > 0 ? s.price / 100 : 100 / -s.price) : s.result === 'Lost' ? -1 : 0), 0), settled = L.filter((s) => s.result === 'Won' || s.result === 'Lost');
-    $('#r-rec').textContent = set(L); $('#r-units').textContent = settled.length ? (units > 0 ? '+' : '') + units.toFixed(2) : '—'; $('#r-units').className = units > 0 ? 'pos' : units < 0 ? 'neg' : '';
-    $('#r-over').textContent = set(L.filter((s) => s.side === 'Over')); $('#r-under').textContent = set(L.filter((s) => s.side === 'Under'));
-    $('#r-days').replaceChildren(...S.index.slice().reverse().map((d) => { const tr = h('tr'); [[pretty(d.date)], [d.games, 'n'], [d.readings, 'n'], [d.gap_abs == null ? '—' : d.gap_abs.toFixed(1), 'n'], [d.below == null ? '—' : `${d.below}%`, 'n'], [d.above == null ? '—' : `${d.above}%`, 'n']].forEach(([v, c]) => tr.append(h('td', c || '', v))); return tr; }));
-    $('#r-nodays').hidden = S.index.length > 0;
-    $('#r-ledger').replaceChildren(...L.map((s) => {
-      const tr = h('tr', 'pick'); [[pretty(s.date)], [s.matchup], [s.market], [s.side], [clockOf(s.t)], [s.score], [f1(s.line), 'n'], [`${s.price > 0 ? '+' : ''}${s.price}${s.priced === 'Assumed' ? '*' : ''}`, 'n'], [f1(s.fair), 'n'], [`${s.chance}%`, 'n'], [s.final == null ? '' : s.final, 'n'], [s.result, s.result === 'Won' ? 'pos' : s.result === 'Lost' ? 'neg' : '']].forEach(([v, c]) => tr.append(h('td', c || '', v)));
-      tr.onclick = async () => { S.date = s.date; S.games.clear(); S.mkt = s.mkt; await refresh(true); openGame(s.game); };
-      return tr;
-    }));
-    $('#r-noledger').hidden = L.length > 0;
-  }
+  <footer class="foot">
+    <p>Scores and play-by-play come from ESPN. Lines are DraftKings’ pregame and live numbers as ESPN publishes them. ESPN drops the live line at the final whistle, so a recorder saves it every 30 seconds while games are on.</p>
+    <p>Fair is the current score plus a rest-of-game estimate fitted on 16,086 Division I games, 2022–23 through December 2025. It knows nothing about injuries, foul trouble or who is on the floor. This is information, not betting advice.</p>
+    <p><a href="https://github.com/alecmessino/cold-stretch-live">Source, model and recorded data</a></p>
+  </footer>
+</main>
 
-  /* ---------- loop ---------- */
-  function setTab(t) { S.tab = t; $$('.tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === t)); ['live', 'game', 'record'].forEach((k) => { $(`#tab-${k}`).hidden = k !== t; }); if (t === 'game') drawGame(); if (t === 'record') drawRecord(); window.scrollTo(0, 0); }
-  function drawStatus() {
-    const live = [...S.games.values()].filter((g) => g.state === 'in').length, ok = !S.err && Date.now() - S.lastOk < 90000;
-    $('#dot').className = 'dot' + (S.err ? ' err' : ok && isToday() ? ' on' : '');
-    $('#status').textContent = S.err ? `ESPN not responding (${S.err})` : `${isToday() ? `${live} live` : pretty(S.date)} · ${new Date(S.lastOk || Date.now()).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' })}${S.recAt ? ` · recorder ${Math.max(0, Math.round((Date.now() / 1000 - S.recAt) / 60))}m ago` : ''}`;
-  }
-  let busy = false, n = 0;
-  async function refresh(force) {
-    if (busy && !force) return; busy = true;
-    try {
-      await loadBoard();
-      const live = [...S.games.values()].filter((g) => g.state === 'in');
-      if (isToday()) await pool(live, 6, loadOdds);
-      if (n % 9 === 0 || force) { await loadRecorded(); await loadRecord(); }
-      const sel = S.sel ? S.games.get(S.sel) : null;
-      if (sel && S.tab === 'game' && sel.state === 'in' && Date.now() - (sel.playsAt || 0) > 90000) await loadPlays(sel).catch(() => {});
-      n += 1;
-    } catch (e) { S.err = e.message || 'error'; }
-    busy = false; drawStatus(); drawLive(); if (S.tab === 'game') drawGame(); if (S.tab === 'record') drawRecord();
-  }
-  $$('.tabs button').forEach((b) => b.addEventListener('click', () => setTab(b.dataset.tab)));
-  $$('#mkt button').forEach((b) => b.addEventListener('click', () => { S.mkt = b.dataset.mkt; drawGame(); }));
-  const go = (d) => { S.date = d; S.games.clear(); S.sel = null; refresh(true); };
-  $('#prev').addEventListener('click', () => go(shift(S.date, -1))); $('#next').addEventListener('click', () => go(shift(S.date, 1))); $('#today').addEventListener('click', () => go(slateOf(Date.now())));
-  $('#only').addEventListener('click', () => { S.only = !S.only; drawLive(); });
-  window.addEventListener('resize', () => { if (S.tab === 'game') drawGame(); });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
-  fetch('model.json').then((r) => r.json()).then((m) => { S.model = { rows: new Map(m.rows.map((r) => [r.minute, r])), cdf: m.cdf }; refresh(true); setInterval(() => { if (!document.hidden) refresh(); }, 20000); })
-    .catch(() => { $('#status').textContent = 'Could not load the model file'; $('#dot').className = 'dot err'; });
-  window.__S = S;
-})();
-</script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" integrity="sha384-CjloA8y00+1SDAUkjs099PVfnY2KmDC2BZnws9kh8D/lX1s46w6EPhpXdqMfjK6i" crossorigin="anonymous"></script>
+<script type="module" src="js/app.js"></script>
 </body>
 </html>
