@@ -60,7 +60,11 @@ A signal is the first time the average sits **2 or more deviations from zero, at
 - **Over**: the book is under fair. This is the cold-stretch case.
 - **Under**: the book is over fair, usually a hot pace carried too far.
 
-The recorder stores the yardstick with each day and re-estimates it from completed slates only, so a slate is never judged with its own data. It also runs nine rules on every slate (the three-minute average at 1.5, 2, 2.5 and 3 deviations; two- and five-minute averages at 2; single readings at 2, at 3, and at 2 after 1.5) and splits each by stage of the game (`ladder.json`), so the rule can be chosen on outcomes. When the rules change (`RULES_VERSION`), the recorder judges every stored slate again from its readings the next time it starts.
+The recorder stores the yardstick with each day and re-estimates it from completed slates only, so a slate is never judged with its own data. It also runs nine rules on every slate (the three-minute average at 1.5, 2, 2.5 and 3 deviations; two- and five-minute averages at 2; single readings at 2, at 3, and at 2 after 1.5) and splits each by stage of the game (`ladder.json`), so the rule can be chosen on outcomes. When the rules change (`RULES_VERSION`), the recorder judges every stored slate again from its readings the next time it starts. A slate keeps the yardstick it was first judged with.
+
+Lopsided spots (a 20-point pregame spread, a 15-point lead) are left out of the signal, the yardstick and the daily summary. Across 971 games with a 20-point spread in three seasons the fair number ran about a point high (final 1.35 under fair at halftime, standard error 0.34), against 0.1 in other games. The same rule is still run on those spots as a tenth row of the ladder (`lopsided`) and shown on the game page beside the signals, so the exclusion can be judged on results. On the trend charts those stretches are filled grey.
+
+A reading taken at the end of regulation is dropped by the app: if the game is tied it already carries the overtime line.
 
 Game totals are settled at DraftKings' live price. Team totals are implied from the live total and spread, (total ± spread) / 2, and priced at an estimated -115, because the feed carries no posted team-total market.
 

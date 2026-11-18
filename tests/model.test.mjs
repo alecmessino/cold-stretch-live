@@ -122,6 +122,17 @@ test('no signals in blowouts, on huge spreads, or outside the window', () => {
   assert.ok(early.every((s) => s.minute >= RULES.firstMinute), 'nothing before the first minute');
 });
 
+test('lopsided spots are judged apart: off in the record, on in the comparison', () => {
+  const held = [4, 4, 4, 4, 4, 4];
+  const shadow = (opts, pre = [150, 0]) => model.signalsFor(pre, steady(held, { ...opts, pre }), null, { lopsided: true }).filter((s) => s.market === 'total');
+  assert.equal(shadow({}).length, 0, 'a close game never appears in the comparison');
+  assert.equal(shadow({ h0: 30 + RULES.blowoutLead }).length, 1, 'a big lead does');
+  assert.equal(shadow({}, [150, -RULES.blowoutSpread]).length, 1, 'and so does a wide spread');
+  assert.equal(shadow({}, [150, -RULES.blowoutSpread])[0].minute, totals(steady(held))[0].minute, 'it is the same rule, applied where the signal is off');
+  const rows = model.track([150, -RULES.blowoutSpread], steady(held, { pre: [150, -RULES.blowoutSpread] }));
+  assert.ok(rows.every((r) => r.lopsided && !r.eligible), 'every reading of a wide-spread game is marked');
+});
+
 test('a hole in the feed longer than the carry limit starts the average again', () => {
   const rows = steady([3, 3, 3, 3, 3]);
   const later = rows.map((r) => [r[0] + 2000, r[1] + 5, r[2] + 8, r[3] + 8, model.fair([150, 0], r[1] + 5, r[2] + 8, r[3] + 8).total - 3, r[5], r[6], r[7]]);

@@ -54,23 +54,34 @@ export function trendPanel(host, d) {
   if (pts.length) {
     // thin line: every reading. Bold line: the rolling average the signal is judged on (falls back to a local mean if none is supplied).
     const hasAvg = pts.some((p) => p.avg != null);
-    const bold = hasAvg ? pts.filter((p) => p.avg != null).map((p) => ({ t: p.t, gap: p.avg })) : pts.map((p) => ({ t: p.t, gap: d3.mean(pts.filter((q) => Math.abs(q.t - p.t) <= 1.5), (q) => q.gap) }));
+    const bold = hasAvg ? pts.filter((p) => p.avg != null).map((p) => ({ t: p.t, gap: p.avg, off: !!p.off })) : pts.map((p) => ({ t: p.t, gap: d3.mean(pts.filter((q) => Math.abs(q.t - p.t) <= 1.5), (q) => q.gap) }));
     const joined = (rows) => (p, i) => i === 0 || p.t - rows[i - 1].t <= 3; // a break in the line where the recording has a hole
     svg.append('path').attr('d', d3.line().defined(joined(pts)).x((p) => x(p.t)).y((p) => y(p.gap))(pts)).attr('fill', 'none').attr('stroke', 'var(--rule-strong)').attr('stroke-width', 1).attr('stroke-linejoin', 'round');
     if (bold.length) {
-      svg.append('path').attr('d', d3.area().defined(joined(bold)).x((p) => x(p.t)).y0(y(thr)).y1((p) => y(Math.max(p.gap, thr)))(bold)).attr('fill', 'var(--fair)').attr('opacity', 0.5);
-      svg.append('path').attr('d', d3.area().defined(joined(bold)).x((p) => x(p.t)).y0(y(-thr)).y1((p) => y(Math.min(p.gap, -thr)))(bold)).attr('fill', 'var(--book)').attr('opacity', 0.5);
+      // Beyond the band: coloured where a signal can fire, grey where signals are off (a lopsided game or lead).
+      // Readings are grouped into runs of one kind; each run starts from the reading before it so the fills meet.
+      const runs = [];
+      bold.forEach((p, i) => {
+        const hole = i > 0 && p.t - bold[i - 1].t > 3, cur = runs[runs.length - 1];
+        if (!cur || hole || cur.off !== !!p.off) runs.push({ off: !!p.off, rows: i > 0 && !hole ? [bold[i - 1], p] : [p] });
+        else cur.rows.push(p);
+      });
+      for (const run of runs) {
+        const fill = (colour) => (run.off ? 'var(--rule-strong)' : colour), xs = (p) => x(p.t);
+        svg.append('path').attr('d', d3.area().x(xs).y0(y(thr)).y1((p) => y(Math.max(p.gap, thr)))(run.rows)).attr('fill', fill('var(--fair)')).attr('opacity', run.off ? 0.45 : 0.5);
+        svg.append('path').attr('d', d3.area().x(xs).y0(y(-thr)).y1((p) => y(Math.min(p.gap, -thr)))(run.rows)).attr('fill', fill('var(--book)')).attr('opacity', run.off ? 0.45 : 0.5);
+      }
       svg.append('path').attr('d', d3.line().defined(joined(bold)).x((p) => x(p.t)).y((p) => y(p.gap))(bold)).attr('fill', 'none').attr('stroke', 'var(--ink)').attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round');
-      const tone = (g) => (g >= thr ? 'var(--fair)' : g <= -thr ? 'var(--book)' : 'var(--ink)');
+      const tone = (p) => (Math.abs(p.gap) < thr ? 'var(--ink)' : p.off ? 'var(--faint)' : p.gap > 0 ? 'var(--fair)' : 'var(--book)');
       const end = bold[bold.length - 1], peak = bold.reduce((b, p) => (Math.abs(p.gap) > Math.abs(b.gap) ? p : b), bold[0]);
       if (Math.abs(peak.gap) >= thr && !(end.t - peak.t < 1.5 && Math.abs(peak.gap - end.gap) < 0.05)) {
-        svg.append('circle').attr('cx', x(peak.t)).attr('cy', y(peak.gap)).attr('r', 3).attr('fill', tone(peak.gap));
-        svg.append('text').attr('class', 'lbl').attr('x', Math.max(m.l + 14, Math.min(W - m.r - 14, x(peak.t)))).attr('y', y(peak.gap) + (peak.gap > 0 ? -7 : 15)).attr('text-anchor', 'middle').style('fill', tone(peak.gap)).text(show(peak.gap));
+        svg.append('circle').attr('cx', x(peak.t)).attr('cy', y(peak.gap)).attr('r', 3).attr('fill', tone(peak));
+        svg.append('text').attr('class', 'lbl').attr('x', Math.max(m.l + 14, Math.min(W - m.r - 14, x(peak.t)))).attr('y', y(peak.gap) + (peak.gap > 0 || y(peak.gap) + 15 > H - m.b - 3 ? -7 : 15)).attr('text-anchor', 'middle').style('fill', tone(peak)).text(show(peak.gap));
       }
       svg.append('g').selectAll('path').data(d.signals || []).join('path').attr('d', d3.symbol(d3.symbolTriangle, 60))
         .attr('transform', (s) => `translate(${x(s.minute)},${s.side === 'Over' ? H - m.b - 7 : m.t + 7}) rotate(${s.side === 'Over' ? 0 : 180})`).attr('fill', (s) => (s.side === 'Over' ? 'var(--fair)' : 'var(--book)'));
-      svg.append('circle').attr('cx', x(end.t)).attr('cy', y(end.gap)).attr('r', 4.5).attr('fill', tone(end.gap)).attr('stroke', 'var(--panel)').attr('stroke-width', 1.5);
-      svg.append('text').attr('class', 'lbl').attr('x', W - m.r + 7).attr('y', y(end.gap)).attr('dy', '0.32em').style('fill', tone(end.gap)).text(show(end.gap));
+      svg.append('circle').attr('cx', x(end.t)).attr('cy', y(end.gap)).attr('r', 4.5).attr('fill', tone(end)).attr('stroke', 'var(--panel)').attr('stroke-width', 1.5);
+      svg.append('text').attr('class', 'lbl').attr('x', W - m.r + 7).attr('y', y(end.gap)).attr('dy', '0.32em').style('fill', tone(end)).text(show(end.gap));
     }
   }
   host.replaceChildren(svg.node());

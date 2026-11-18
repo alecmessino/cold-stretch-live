@@ -102,6 +102,17 @@ class Recording(unittest.TestCase):
         self.assertEqual(self.total(self.game(held, start=record.T1 + 0.5, every=20)), [])
         self.assertTrue(all(s['t'] >= record.T0 for s in record.signals_for(self.game(held, start=0, a0=0, h0=0, every=30))))
 
+    def test_lopsided_spots_are_judged_apart_and_kept_out_of_the_yardstick(self):
+        held = [4] * 6; shadow = lambda g: [s for s in record.signals_for(g, lopsided=True) if s['mkt'] == 'total']
+        wide, led, close = self.game(held, pre=(150, -record.BLOW_SPREAD)), self.game(held, h0=30 + record.BLOW_LEAD), self.game(held)
+        self.assertEqual(len(shadow(wide)), 1, 'a wide spread fires only in the comparison')
+        self.assertEqual(len(shadow(led)), 1, 'and so does a big lead')
+        self.assertEqual(shadow(close), [], 'a close game never appears in the comparison')
+        self.assertEqual(shadow(wide)[0]['t'], self.total(close)[0]['t'], 'it is the same rule, applied where the signal is off')
+        self.assertEqual(record.devs_of(wide), [])
+        self.assertEqual(record.devs_of(led), [])
+        self.assertGreater(len(record.devs_of(close)), 0)
+
     def test_save_writes_tracks_ledger_and_index(self):
         self.add(0, 10, 15, 15, 150.5)
         self.add(60, 11, 17, 15, 150.5)
@@ -112,8 +123,8 @@ class Recording(unittest.TestCase):
         self.assertIsInstance(json.load(open(os.path.join(self.dir.name, 'ledger.json'))), list)
         self.assertEqual(day['yardstick']['source'], 'model.json', 'no earlier slate, so the shipped yardstick is used and stored with the day')
         ladder = json.load(open(os.path.join(self.dir.name, 'ladder.json')))
-        self.assertEqual({r['rule'] for r in ladder}, {v[0] for v in record.VARIANTS})
-        self.assertEqual(len(ladder), len(record.VARIANTS) * len(record.STAGES))
+        self.assertEqual({r['rule'] for r in ladder}, {v[0] for v in record.VARIANTS} | {record.SHADOW[0]})
+        self.assertEqual(len(ladder), (len(record.VARIANTS) + 1) * len(record.STAGES))
 
     def test_stored_slates_are_judged_again_when_the_rules_change(self):
         self.add(0, 10, 15, 15, 150.5)
@@ -126,6 +137,19 @@ class Recording(unittest.TestCase):
         self.assertEqual(json.load(open(os.path.join(self.dir.name, 'rules.json')))['version'], record.RULES_VERSION)
         self.assertEqual(len(json.load(open(os.path.join(self.dir.name, 'tracks', '20261117.json')))['games'][0]['r']), 2, 'readings are untouched')
         self.assertFalse(record.migrate(self.dir.name), 'and it only runs once per rules version')
+
+    def test_a_slate_keeps_its_yardstick_when_the_rules_change(self):
+        self.add(0, 10, 15, 15, 150.5)
+        self.store.save()
+        path = os.path.join(self.dir.name, 'tracks', '20261117.json'); day = json.load(open(path))
+        day['yardstick'] = {'total': 1.5, 'team': 0.9, 'unit': 'points', 'source': 'recorded'}; json.dump(day, open(path, 'w'))
+        json.dump({'version': 'older'}, open(os.path.join(self.dir.name, 'rules.json'), 'w'))
+        self.assertTrue(record.migrate(self.dir.name))
+        self.assertEqual(json.load(open(path))['yardstick']['total'], 1.5, 'signals already logged are not re-measured after the fact')
+        day['yardstick'] = {'total': 0.14, 'team': 0.15}; json.dump(day, open(path, 'w'))   # an older unit
+        json.dump({'version': 'older'}, open(os.path.join(self.dir.name, 'rules.json'), 'w'))
+        self.assertTrue(record.migrate(self.dir.name))
+        self.assertEqual(json.load(open(path))['yardstick']['unit'], 'points')
 
     def test_yardstick_comes_from_earlier_slates_only(self):
         import random; random.seed(7)

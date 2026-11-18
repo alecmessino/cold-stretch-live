@@ -100,6 +100,7 @@ h2 { font: 600 23px/1.2 var(--serif); letter-spacing: -0.005em; }
 .gloss .k-band { background: var(--band); border: 1px solid var(--rule-strong); }
 .gloss .k-low { background: var(--fair); opacity: 0.5; }
 .gloss .k-high { background: var(--book); opacity: 0.5; }
+.gloss .k-off { background: var(--rule-strong); opacity: 0.45; }
 .gloss .k-sd { height: 0; border-top: 2px dotted var(--faint); }
 
 /* small multiples: one panel per game, the same scale in each */
@@ -233,6 +234,8 @@ h2 { font: 600 23px/1.2 var(--serif); letter-spacing: -0.005em; }
 
 /* ---------- tables ---------- */
 .sheet { overflow-x: auto; background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; }
+.sheet.is-aside { border-style: dashed; border-color: var(--rule-strong); }
+.sheet.is-aside td { color: var(--sub); }
 table { border-collapse: collapse; width: 100%; min-width: 640px; }
 th, td { padding: 11px 16px; text-align: left; white-space: nowrap; }
 th { font-size: 13px; font-weight: 600; color: var(--sub); border-bottom: 1px solid var(--rule); }

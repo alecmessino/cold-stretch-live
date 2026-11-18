@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cold Stretch Live</title>
-<meta name="description" content="Live college basketball totals: DraftKings' live line set against a fair final-score estimate for every game, with the record kept.">
+<meta name="description" content="Live college basketball totals: the sportsbook's live line set against a fair final-score estimate for every game, with the record kept.">
 <meta name="theme-color" content="#F4F6F9">
 <meta property="og:title" content="Cold Stretch Live">
 <meta property="og:description" content="Does the book's live total drop too far when a team goes cold? Every game, measured.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230F1B2D'/%3E%3Cpath d='M6 21h7v-6h6v-5h7' fill='none' stroke='%23F0843C' stroke-width='3'/%3E%3Cpath d='M6 17c7 0 12-2 20-9' fill='none' stroke='%237FA2FF' stroke-width='3'/%3E%3C/svg%3E">
 <link rel="preload" href="fonts/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/app.css?v=8">
+<link rel="stylesheet" href="css/app.css?v=9">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -68,7 +68,7 @@
         </div>
       </div>
       <div id="trend-key">
-        <p class="gloss"><span><i class="k-line"></i>Three-minute average</span><span><i class="k-thin"></i>Each reading</span><span><i class="k-band"></i>Within 2 deviations: no trade</span><span><i class="k-low"></i>Book low: over side</span><span><i class="k-high"></i>Book high: under side</span></p>
+        <p class="gloss"><span><i class="k-line"></i>Three-minute average</span><span><i class="k-thin"></i>Each reading</span><span><i class="k-band"></i>Within 2 deviations: no trade</span><span><i class="k-low"></i>Book low: over side</span><span><i class="k-high"></i>Book high: under side</span><span><i class="k-off"></i>Lopsided game: signals off</span></p>
         <p class="note" id="sigma-note"></p>
       </div>
       <p class="note" id="table-key" hidden>The three-minute average of fair minus book, in deviations. Dot: now. Bar: its range since recording began.</p>
@@ -124,7 +124,7 @@
       </div>
       <p class="read" id="read"></p>
       <dl class="facts">
-        <div class="book"><dt id="f-book-l">DraftKings live</dt><dd id="f-book">–</dd></div>
+        <div class="book"><dt id="f-book-l">Sportsbook live</dt><dd id="f-book">–</dd></div>
         <div class="fair"><dt id="f-fair-l">Fair</dt><dd id="f-fair">–</dd></div>
         <div><dt>Fair minus book, now</dt><dd id="f-gap">–</dd></div>
         <div><dt id="f-sigma">Three-minute average, in deviations</dt><dd id="f-dev">–</dd></div>
@@ -134,7 +134,7 @@
       </dl>
       <div class="panel chart-panel">
         <p class="legend">
-          <span><i class="k-book"></i>DraftKings live</span><span><i class="k-fair"></i>Fair</span><span><i class="k-zone"></i>Within 2 deviations of fair</span><span><i class="k-pre"></i>Pregame</span>
+          <span><i class="k-book"></i>Sportsbook live</span><span><i class="k-fair"></i>Fair</span><span><i class="k-zone"></i>Within 2 deviations of fair</span><span><i class="k-pre"></i>Pregame</span>
           <span><i class="k-away"></i><span id="lg-away">Away</span></span><span><i class="k-home"></i><span id="lg-home">Home</span></span>
         </p>
         <p class="scrub" id="scrub" aria-live="off"></p>
@@ -156,6 +156,13 @@
           </table>
         </div>
         <p class="quiet" id="sig-none" hidden>None. An empty list is a valid result.</p>
+        <p class="note" id="sig-off" hidden></p>
+        <div class="sheet is-aside" id="shadow-sheet" hidden>
+          <table>
+            <thead><tr><th>Market</th><th>Side</th><th>Clock</th><th>Score</th><th class="r">Line</th><th class="r">Fair</th><th class="r">Deviations</th><th class="r">Chance</th><th class="r">Final</th><th>Result</th></tr></thead>
+            <tbody id="shadow-rows"></tbody>
+          </table>
+        </div>
       </div>
     </div>
   </section>
@@ -164,7 +171,7 @@
     <div class="lead">
       <div class="lead-say">
         <h1 class="headline" id="rec-head">The record.</h1>
-        <p class="standfirst">Every signal the recorder has logged, settled against the final score. A signal is the first time the three-minute rolling average of fair minus book sits 2 or more deviations from zero, at a price the chance still beats by five points. Minutes 4 to 38 only, and never in a blowout. November 17 was scored after this rule was chosen, so it is a backfill and not a test. The forward record starts November 18.</p>
+        <p class="standfirst">Every signal the recorder has logged, settled against the final score. A signal is the first time the three-minute rolling average of fair minus book sits 2 or more deviations from zero, at a price the chance still beats by five points. Minutes 4 to 38 only, and never with a pregame spread of 20 or a lead of 15. A game total and the two team totals in one game are the same view counted up to three times, so read the record by game as well as by signal. November 17 was scored after this rule was chosen, so it is a backfill and not a test. The forward record starts November 18.</p>
       </div>
     </div>
     <dl class="sums">
@@ -187,7 +194,7 @@
 
     <div class="block">
       <h2>What each rule would have done</h2>
-      <p class="note">Nine rules run on the same readings, so the rule is chosen on results and not by feel. Readings are about a minute apart. One deviation is the usual spread of the three-minute average, about 1.2 points for a game total. November 17 is measured against itself; every later slate uses only the slates before it.</p>
+      <p class="note">Nine rules run on the same readings, so the rule is chosen on results and not by feel. Readings are about a minute apart. One deviation is the usual spread of the three-minute average, about 1.2 points for a game total. November 17 is measured against itself; every later slate uses only the slates before it. The last row is the signal applied only where it is switched off, to test that choice. It is not in the record.</p>
       <div class="sheet" id="ladder-sheet">
         <table>
           <thead><tr><th>Rule</th><th class="r">Signals</th><th class="r">Won–lost</th><th class="r">Win rate</th><th class="r">Units</th><th class="r">Open</th></tr></thead>
@@ -217,21 +224,21 @@
         </table>
       </div>
       <p class="quiet" id="ledger-none" hidden>No signals logged yet.</p>
-      <p class="quiet small">Game totals are settled at DraftKings’ live price. Team totals are implied from the live total and spread, and priced at an estimated -115.</p>
+      <p class="quiet small">Game totals are settled at the sportsbook’s live price. Team totals are implied from the live total and spread, and priced at an estimated -115.</p>
     </div>
   </section>
 </main>
 
 <footer class="wrap">
   <div class="foot">
-    <p>Scores and play-by-play come from ESPN. Lines are DraftKings’ pregame and live numbers as ESPN publishes them. ESPN drops the live line at the final whistle, so a recorder saves it every 30 seconds while games are on.</p>
+    <p>Scores and play-by-play come from ESPN. Lines are a sportsbook’s pregame and live numbers as ESPN publishes them. ESPN drops the live line at the final whistle, so a recorder saves it every 30 seconds while games are on.</p>
     <p>Fair is the current score plus a rest-of-game estimate fitted on 16,086 Division I games, 2022–23 through December 2025. It knows nothing about injuries, foul trouble or who is on the floor. Signals are judged on a three-minute rolling average of the gap, measured in deviations: the usual spread of that average, re-estimated from every completed slate. This is information, not betting advice.</p>
     <p><a href="https://github.com/alecmessino/cold-stretch-live">Source, model and recorded data</a></p>
   </div>
 </footer>
 
 <script src="vendor/d3.v7.9.2.min.js"></script>
-<script type="module" src="js/app.js?v=8"></script>
+<script type="module" src="js/app.js?v=9"></script>
 <script>
   // If the app has not started after ten seconds, say so instead of sitting on "Loading".
   setTimeout(function () {

@@ -25,8 +25,9 @@ M0, M1, MIN_YARD_READINGS = 4, 38, 300
 # (id, deviations, seconds averaged (0 = a single reading), deviations the previous reading must already show (None = not needed)).
 VARIANTS = (('signal', BUY_DEV, WINDOW, None), ('avg3-1.5', 1.5, WINDOW, None), ('avg3-2.5', 2.5, WINDOW, None), ('avg3-3', 3.0, WINDOW, None),
             ('avg2-2', 2.0, 120, None), ('avg5-2', 2.0, 300, None), ('one-2', 2.0, 0, None), ('one-3', 3.0, 0, None), ('one-2-after-1.5', 2.0, 0, 1.5))
+SHADOW = ('lopsided', BUY_DEV, WINDOW, None)   # the signal, judged only where it is switched off (wide spread or big lead): tracked, not counted
 STAGES = (('all', 0, 41), ('4 to 20', 0, 20), ('20 to 34', 20, 34), ('34 to 38', 34, 41))
-RULES_VERSION = '2026-11-18.3'   # change this whenever a rule, window or variant changes: the recorder then re-judges every stored slate when it next starts
+RULES_VERSION = '2026-11-18.4'   # change this whenever a rule, window or variant changes: the recorder then re-judges every stored slate when it next starts
 MODEL = json.load(open(os.path.join(ROOT, 'model.json')))
 ROWS = {r['minute']: r for r in MODEL['rows']}; CDF = MODEL['cdf']; YARD = {k: MODEL['yardstick'][k] for k in ('total', 'team')}
 
@@ -78,11 +79,12 @@ def rolled(g, window=WINDOW):
         out.append(dict(ts=ts, t=t, a=a, h=h, bt=bt, bs=bs, op=op, up=up, f=f, gaps=gaps, avg=avg))
     return out
 def devs_of(g):
-    """For every reading in the measuring window that has a three-minute average: the averaged total, away and home gaps
-    in points, and the single-reading total gap."""
-    if not g.get('pre'): return []
+    """For every reading where a signal could fire (inside the measuring window, three-minute average available, not a
+    lopsided game): the averaged total, away and home gaps in points, and the single-reading total gap. The yardstick and
+    the daily summary are measured on these, so one deviation describes the games the rule is actually applied to."""
+    if not g.get('pre') or abs(g['pre'][1]) >= BLOW_SPREAD: return []
     return [(r['avg'][0], r['avg'][1], r['avg'][2], r['gaps'][0])
-            for r in rolled(g) if r['avg'] is not None and M0 <= r['t'] <= M1]
+            for r in rolled(g) if r['avg'] is not None and M0 <= r['t'] <= M1 and abs(r['a'] - r['h']) < BLOW_LEAD]
 def sd(xs):
     m = sum(xs) / len(xs); return (sum((x - m) ** 2 for x in xs) / len(xs)) ** 0.5
 def yardstick(out, before):
@@ -109,17 +111,19 @@ def slate_date(now=None):
     now = now or datetime.datetime.now(datetime.timezone.utc)
     return (now - datetime.timedelta(hours=10)).strftime('%Y%m%d')
 
-def signals_for(g, yard=None, k=BUY_DEV, window=WINDOW, arm=None):
+def signals_for(g, yard=None, k=BUY_DEV, window=WINDOW, arm=None, lopsided=False):
     """First reading per market and side whose averaged gap sits k deviations from zero, at a price the chance clears.
     arm: if given, the reading before it must already have been that many deviations out on the same side.
+    Signals are off in lopsided spots (a pregame spread of BLOW_SPREAD or a lead of BLOW_LEAD). lopsided=True judges only
+    those spots instead: it is kept beside the record, never in it, to show what leaving them out costs or saves.
     Team totals are implied from the live total and spread."""
     yard = yard or YARD
     if not g.get('pre'): return []
-    tot, hsp = g['pre']; out = []; fired = set(); fin = g.get('final'); prev_ok = {}
-    if abs(hsp) >= BLOW_SPREAD: return []
+    tot, hsp = g['pre']; out = []; fired = set(); fin = g.get('final'); prev_ok = {}; wide = abs(hsp) >= BLOW_SPREAD
+    if wide and not lopsided: return []
     for r in rolled(g, window):
         t, a, h, f, bt, bs = r['t'], r['a'], r['h'], r['f'], r['bt'], r['bs']
-        if r['avg'] is None or not (T0 <= t <= T1) or abs(a - h) >= BLOW_LEAD: prev_ok = {}; continue
+        if r['avg'] is None or not (T0 <= t <= T1) or (wide or abs(a - h) >= BLOW_LEAD) != lopsided: prev_ok = {}; continue
         now_ok = {}
         mk = [('total', 'Game total', f['fa'] + f['fh'], bt, f['sd_total'], yard['total'], (f['ashort'] + f['hshort']) >= 5, r['op'], r['up'], None if not fin else fin[0] + fin[1]),
               ('away', g['away'] + ' team total', f['fa'], bt / 2 + bs / 2, f['sd_team'], yard['team'], f['ashort'] >= 3, None, None, None if not fin else fin[0]),
@@ -175,8 +179,8 @@ class Store:
             json.dump({'date': date, 'updated': int(time.time()), 'yardstick': yard, 'games': gl}, open(self.path(date), 'w'), separators=(',', ':'))
             ledger = [s for s in ledger if s['date'] != date] + [s for g in gl for s in signals_for(g, yard)]
             ladder = [r for r in ladder if r['date'] != date]
-            for rule, k, window, arm in VARIANTS:   # what each rule would have done, overall and by stage of the game
-                every = [s for g in gl for s in signals_for(g, yard, k, window, arm)]
+            for rule, k, window, arm in VARIANTS + (SHADOW,):   # what each rule would have done, overall and by stage of the game
+                every = [s for g in gl for s in signals_for(g, yard, k, window, arm, rule == SHADOW[0])]
                 for stage, lo, hi in STAGES:
                     sig = [s for s in every if lo <= s['t'] < hi]; res = [s['result'] for s in sig]
                     ladder.append(dict(date=date, rule=rule, stage=stage, n=len(sig), won=res.count('Won'), lost=res.count('Lost'), push=res.count('Push'), open=res.count('Pending'),
@@ -192,7 +196,8 @@ class Store:
 
 def migrate(out):
     """If the stored results were judged under other rules, judge every stored slate again from its readings.
-    Readings are never changed; yardsticks, ledger, ladder and daily summaries are rebuilt. Returns True if it ran."""
+    Readings are never changed, and a slate keeps the yardstick it was first judged with (one stored in another unit is
+    measured again); ledger, ladder and daily summaries are rebuilt. Returns True if it ran."""
     path = os.path.join(out, 'rules.json')
     try: current = json.load(open(path)).get('version')
     except Exception: current = None
@@ -200,7 +205,6 @@ def migrate(out):
     store = Store(out); tdir = os.path.join(out, 'tracks')
     for name in sorted(os.listdir(tdir)):
         if name.endswith('.json'): store.day(name[:-5])
-    store.yards.clear()
     for stale in ('ladder.json', 'ledger.json', 'index.json'):
         try: os.remove(os.path.join(out, stale))
         except OSError: pass

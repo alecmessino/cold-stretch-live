@@ -134,15 +134,19 @@ export function createModel(json) {
    * Returns, per market, the line, the fair number, the edge (fair minus line) in points, `sd` (the model's rest-of-game
    * standard deviation), `sigma` (the points one deviation is worth), `dev` (this reading's edge in deviations) and
    * the chance of the over. Signals are not decided here: they need the rolling average (see track).
-   * opts: { yard }.
+   * opts: { yard, lopsided }.
    */
   function judge(pre, t, awayPts, homePts, bookTotal, bookSpread, opts = {}) {
     const yard = opts.yard || baseYard;
     const f = fair(pre, t, awayPts, homePts);
     const hasBook = bookTotal != null && bookSpread != null;
     const lines = hasBook ? { total: bookTotal, away: bookTotal / 2 + bookSpread / 2, home: bookTotal / 2 - bookSpread / 2 } : null;
-    const eligible = t >= RULES.firstMinute && t <= RULES.lastMinute
-      && Math.abs(awayPts - homePts) < RULES.blowoutLead && Math.abs(pre[1]) < RULES.blowoutSpread;
+    // Lopsided: a pregame spread or a lead past the limits. Signals are off there, because across three seasons the fair
+    // number ran about a point high in games with a 20-point spread. opts.lopsided judges only those readings instead,
+    // which is how the "had signals been on" comparison is kept.
+    const inWindow = t >= RULES.firstMinute && t <= RULES.lastMinute;
+    const lopsided = Math.abs(awayPts - homePts) >= RULES.blowoutLead || Math.abs(pre[1]) >= RULES.blowoutSpread;
+    const eligible = inWindow && (opts.lopsided ? lopsided : !lopsided);
     const markets = {};
     for (const k of ['total', 'away', 'home']) {
       const m = { fair: f[k], line: null, edge: null, dev: null, sd: k === 'total' ? f.sdTotal : f.sdTeam, sigma: k === 'total' ? yard.total : yard.team,
@@ -157,7 +161,7 @@ export function createModel(json) {
       }
       markets[k] = m;
     }
-    return { fair: f, markets, eligible };
+    return { fair: f, markets, eligible, lopsided };
   }
 
   /**
@@ -209,7 +213,7 @@ export function createModel(json) {
   /**
    * Signals in a game's readings: the first reading per market and side whose rolling average is buyDev deviations out.
    * finals: {away, home} once the game is over, else null.
-   * opts: { yard, buyDev, windowSec, armDev }. armDev, when given, also requires the reading before it to have been
+   * opts: { yard, buyDev, windowSec, armDev, lopsided }. armDev, when given, also requires the reading before it to have been
    * that far out on the same side (only used by the single-reading comparison rules).
    */
   function signalsFor(pre, readings, finals, opts = {}) {
