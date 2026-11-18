@@ -83,10 +83,13 @@ test('no signals in blowouts, on huge spreads, or outside the window', () => {
 });
 
 test('gap summary: average distance and the share of readings beyond the threshold on each side', () => {
-  assert.deepEqual(gapStats([]), { n: 0, abs: null, low: null, high: null });
+  assert.deepEqual(gapStats([]), { n: 0, abs: null, low: null, high: null, mean: null, sd: null });
   const s = gapStats([0, 1, -1, 2.5, -2.5, -4, 3, -3], 2.5);
   assert.equal(s.n, 8);
   close(s.abs, 17 / 8, 'average distance');
   close(s.low, 25, 'book low: +2.5 and +3');
   close(s.high, 37.5, 'book high: -2.5, -4 and -3');
+  close(s.mean, -0.5, 'mean');
+  close(s.sd, Math.sqrt(46.5 / 7), 'sample standard deviation');
+  assert.equal(gapStats([1.2]).sd, null, 'one reading has no spread');
 });

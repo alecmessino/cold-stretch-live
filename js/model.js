@@ -17,14 +17,16 @@ export const RULES = Object.freeze({
 
 /**
  * Summary of a set of fair-minus-book gaps: how far apart the two numbers ran, and how often the book
- * was at least `threshold` points low (the over side) or high (the under side). Shares are percentages.
+ * was at least `threshold` points low (the over side) or high (the under side). Shares are percentages;
+ * `sd` is the sample standard deviation of the gap, the yardstick for how unusual a reading is.
  */
 export function gapStats(gaps, threshold = RULES.buyEdge) {
   const n = gaps.length;
-  if (!n) return { n: 0, abs: null, low: null, high: null };
-  let abs = 0, low = 0, high = 0;
-  for (const g of gaps) { abs += Math.abs(g); if (g >= threshold) low += 1; else if (g <= -threshold) high += 1; }
-  return { n, abs: abs / n, low: (100 * low) / n, high: (100 * high) / n };
+  if (!n) return { n: 0, abs: null, low: null, high: null, mean: null, sd: null };
+  let abs = 0, low = 0, high = 0, sum = 0, squares = 0;
+  for (const g of gaps) { abs += Math.abs(g); sum += g; squares += g * g; if (g >= threshold) low += 1; else if (g <= -threshold) high += 1; }
+  const mean = sum / n;
+  return { n, abs: abs / n, low: (100 * low) / n, high: (100 * high) / n, mean, sd: n > 1 ? Math.sqrt(Math.max(0, squares - n * mean * mean) / (n - 1)) : null };
 }
 
 /** Elapsed game minutes (0-40) from ESPN's period and "MM:SS" clock. Overtime clamps to 40. */

@@ -4,7 +4,7 @@ A live board for one question about college basketball totals: **when a team goe
 
 **Open it:** https://alecmessino.github.io/cold-stretch-live/
 
-The board opens with the slate in one sentence: how far DraftKings' live total has run from a fair final-score estimate, and which way it missed. Under it, every game with a line sits on one scale, fair minus book, with a dot for the latest reading and a bar for the range so far. Open a game to see the book's number and the fair number minute by minute, above the score flow for both teams. A recorder saves every game's live line as it happens, and a ledger settles each signal against the final score.
+The board opens with the slate in one sentence: how far DraftKings' live total has run from a fair final-score estimate, and which way it missed. Under it, every game with a line gets a small chart of fair minus book by game minute, all on one scale: a shaded no-trade band, colour where a reading leaves it, and a dotted line two standard deviations out. A table view puts the same games on one row each. Open a game to see the book's number and the fair number minute by minute, above the score flow for both teams. A recorder saves every game's live line as it happens, and a ledger settles each signal against the final score.
 
 ## How it works
 
@@ -28,7 +28,7 @@ There is no server. The page reads ESPN directly; the only stored data is what t
 | `index.html`, `css/app.css` | The page. |
 | `js/model.js` | The model and the signal rules. Pure functions, shared with the tests. |
 | `js/espn.js` | Fetching and parsing ESPN's feeds. |
-| `js/charts.js` | The range plot, the histogram and the two-pane game chart. |
+| `js/charts.js` | The trend panels, the range plot, the histogram and the two-pane game chart. |
 | `js/app.js` | State, polling, routing and rendering. |
 | `model.json` | Coefficients by game minute, and the distribution used for chances. |
 | `recorder/record.py` | The recorder. Standard library only. |

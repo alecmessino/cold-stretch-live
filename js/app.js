@@ -2,9 +2,9 @@
 // Every local file is requested with the same ?v= release number, so a browser or CDN can never pair one release's
 // page with another's scripts. Bump it everywhere on release; tests/release.test.mjs fails if the numbers disagree.
 
-import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=4';
-import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=4';
-import { rangePlot, histogram, gameChart, fmt } from './charts.js?v=4';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=5';
+import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=5';
+import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=5';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -32,7 +32,8 @@ const today = () => slateOf(Date.now());
 const S = {
   view: 'board', date: today(), sel: null, market: 'total', only: false, cursor: -1,
   games: new Map(), recorded: new Map(), recordedAt: null, ledger: [], index: [],
-  model: null, scoresAt: 0, error: null, polls: 0, busy: false, memo: new Map(), histKey: null,
+  model: null, scoresAt: 0, error: null, polls: 0, busy: false, memo: new Map(), histKey: null, sigma: null,
+  mode: (() => { try { return localStorage.getItem('csl.mode') === 'table' ? 'table' : 'trend'; } catch { return 'trend'; } })(),
 };
 const isToday = () => S.date === today();
 
@@ -193,12 +194,52 @@ async function openSelected() {
 
 /* ---------- board ---------- */
 /** Book against fair at every reading of a game: the series behind the range plot, the histogram and the lead. */
-function series(g) {
-  if (S.memo.has(g.id)) return S.memo.get(g.id);
+function series(g, k = 'total') {
+  const key = `${g.id}:${k}`;
+  if (S.memo.has(key)) return S.memo.get(key);
   const pre = preOf(g);
-  const out = pre && S.model ? readingsOf(g).filter((r) => r[1] >= 2 && r[1] <= 40).map((r) => { const m = S.model.judge(pre, r[1], r[2], r[3], r[4], r[5]).markets.total; return { t: r[1], gap: m.edge, book: m.line, fair: m.fair, over: m.over }; }) : [];
-  S.memo.set(g.id, out);
+  const out = pre && S.model ? readingsOf(g).filter((r) => r[1] >= 2 && r[1] <= 40).map((r) => { const m = S.model.judge(pre, r[1], r[2], r[3], r[4], r[5]).markets[k]; return { t: r[1], gap: m.edge, book: m.line, fair: m.fair, over: m.over }; }) : [];
+  S.memo.set(key, out);
   return out;
+}
+
+function signalsOf(g) {
+  const key = `${g.id}:signals`;
+  if (S.memo.has(key)) return S.memo.get(key);
+  const pre = preOf(g);
+  const out = pre && S.model && Math.abs(pre[1]) < RULES.blowoutSpread ? S.model.signalsFor(pre, readingsOf(g), g.state === 'post' ? { away: g.away.pts, home: g.home.pts } : null) : [];
+  S.memo.set(key, out);
+  return out;
+}
+
+/** What the trend panel's line did, in a sentence: how often it left the band, and how far, in points and in deviations. */
+function excursion(s, sigma) {
+  if (!s.length) return 'No line recorded.';
+  const out = s.filter((p) => Math.abs(p.gap) >= RULES.buyEdge).length;
+  if (!out) return 'Inside the band on every reading.';
+  const peak = s.reduce((b, p) => (Math.abs(p.gap) > Math.abs(b.gap) ? p : b), s[0]);
+  return `Outside the band on ${out} of ${s.length} readings. Peak ${signed(peak.gap)}${sigma ? `, ${(Math.abs(peak.gap) / sigma).toFixed(1)} deviations` : ''}.`;
+}
+
+/** One game as a small multiple. Returns the card and a function that draws its chart once the card is in the page. */
+function trendCard(g, i) {
+  const st = g.state === 'in' ? standing(g) : null, s = series(g), last = s[s.length - 1] || null;
+  const m = st && st.fresh && st.markets.total.line != null ? st.markets.total : null;
+  const now = m ? { gap: m.edge, book: m.line, fair: m.fair } : last;
+  const [text, cls] = word(g, st);
+  const card = h('a', `tp${g.state === 'post' ? ' is-final' : ''}${i === S.cursor ? ' is-cursor' : ''}`);
+  card.href = gameHash(g.id, st && st.best ? st.best.key : 'total');
+  card.dataset.id = g.id;
+  const head = h('span', 'tp-head'), teams = h('span', 'tp-teams'), side = h('span', 'tp-side');
+  teams.append(teamLine(g.away, g.home, true), teamLine(g.home, g.away, true));
+  side.append(h('span', '', clockText(g)), h('span', `c-status ${cls}`, text));
+  head.append(teams, side);
+  const plot = h('span', 'tp-plot'), nums = h('span', 'tp-nums');
+  const num = (label, value, kind) => { const c = h('span'); c.append(document.createTextNode(`${label} `), h('b', kind, value)); return c; };
+  nums.append(num('Book', now ? f1(now.book) : '–', 'book'), num('Fair', now ? f1(now.fair) : '–', 'fair'), num('Gap', now ? signed(now.gap) : '–', 'gap'));
+  card.append(head, plot, nums, h('span', 'tp-say', excursion(s, S.sigma)));
+  const pts = m && last && g.minute > last.t ? s.concat([{ t: g.minute, gap: m.edge }]) : s;
+  return [card, () => trendPanel(plot, { series: pts, threshold: RULES.buyEdge, sigma: S.sigma, label: `${g.away.name} at ${g.home.name}`, signals: signalsOf(g).filter((x) => x.market === 'total') })];
 }
 
 const clockText = (g) => (g.state === 'post' ? 'Final' : g.detail.replace(' - ', ' ').replace('Halftime', 'Half'));
@@ -258,8 +299,7 @@ function renderLead(all) {
     if (!s.length) continue;
     measured += 1;
     for (const p of s) gaps.push(p.gap);
-    const pre = preOf(g);
-    if (Math.abs(pre[1]) < RULES.blowoutSpread) signals += S.model.signalsFor(pre, readingsOf(g), g.state === 'post' ? { away: g.away.pts, home: g.home.pts } : null).length;
+    signals += signalsOf(g).length;
   }
   const st = gapStats(gaps, RULES.buyEdge), live = all.filter((g) => g.state === 'in').length, ahead = all.filter((g) => g.state === 'pre').sort((a, b) => new Date(a.start) - new Date(b.start));
   let head, sub;
@@ -281,6 +321,8 @@ function renderLead(all) {
   $('#fig-low').textContent = st.n ? `${st.low.toFixed(1)}%` : '–';
   $('#fig-high').textContent = st.n ? `${st.high.toFixed(1)}%` : '–';
   $('#fig-sig').textContent = st.n ? String(signals) : '–';
+  $('#key-sd').hidden = !S.sigma;
+  $('#sigma-note').textContent = S.sigma ? `The thin line is every reading. One standard deviation of the gap on this slate is ${S.sigma.toFixed(1)} points, so the band reaches ${(RULES.buyEdge / S.sigma).toFixed(1)} deviations each way and the dotted line marks 2.` : 'The thin line is every reading. The two-deviation line appears once 30 readings are in.';
   $('#hist-title').textContent = st.n ? `All ${plural(st.n, 'reading')}` : 'All readings';
   $('#hist-note').textContent = st.n ? `Every recorded line between minute ${RULES.measureFrom} and minute ${RULES.measureTo}, across ${plural(measured, 'game')}.` : 'The distribution fills in as lines are recorded.';
   return gaps;
@@ -300,8 +342,19 @@ function renderBoard() {
   $('#only').setAttribute('aria-pressed', String(S.only));
   const all = [...S.games.values()], nLive = all.filter((g) => g.state === 'in').length, rows = standGames();
   const gaps = renderLead(all);
-  $('#stand-rows').replaceChildren(...rows.map(standRow));
-  $('#stand').hidden = !rows.length;
+  const trend = S.mode === 'trend';
+  for (const b of document.querySelectorAll('#mode button')) b.setAttribute('aria-pressed', String(b.dataset.mode === S.mode));
+  $('#trend-key').hidden = !trend || !rows.length; $('#table-key').hidden = trend || !rows.length;
+  $('#wall').hidden = !trend || !rows.length; $('#stand').hidden = trend || !rows.length;
+  if (trend) {
+    const cards = rows.map(trendCard);
+    $('#wall').replaceChildren(...cards.map((c) => c[0]));
+    for (const c of cards) c[1]();
+    $('#stand-rows').replaceChildren();
+  } else {
+    $('#stand-rows').replaceChildren(...rows.map(standRow));
+    $('#wall').replaceChildren();
+  }
   const unlined = all.filter((g) => g.state === 'in' && !preOf(g)).length;
   $('#board-unlined').hidden = !unlined || S.only;
   $('#board-unlined').textContent = `${unlined} more in progress with no DraftKings line, so nothing to measure.`;
@@ -389,7 +442,7 @@ function renderGame() {
   if (g.state === 'in' && g.minute <= 40 && g.minute > tl[tl.length - 1].t) tl.push({ t: g.minute, a: g.away.pts, h: g.home.pts });
   if (!pre || !S.model || (tl.length < 2 && !book.length)) {
     host.replaceChildren(h('p', 'vacant', !pre ? 'No chart without a pregame line.' : g.state === 'pre' ? 'The chart starts at tip-off.' : 'Loading the play-by-play.'));
-    scrub.textContent = ''; $('#sig-rows').replaceChildren(); $('#sig-none').hidden = false; $('#sig-sheet').hidden = true; return;
+    scrub.textContent = ''; $('#mk-wall').replaceChildren(); $('#sig-rows').replaceChildren(); $('#sig-none').hidden = false; $('#sig-sheet').hidden = true; return;
   }
   const paceKey = k === 'total' ? 'paceTotal' : k === 'away' ? 'paceAway' : 'paceHome';
   const fairPts = [], pacePts = [];
@@ -412,6 +465,18 @@ function renderGame() {
     },
   });
   idle();
+  const cards = ['total', 'away', 'home'].map((mk) => {
+    const sm = series(g, mk), end = sm[sm.length - 1] || null, card = h('button', 'tp'), plot = h('span', 'tp-plot'), nums = h('span', 'tp-nums');
+    card.type = 'button'; card.setAttribute('aria-pressed', String(mk === k));
+    const title = mk === 'total' ? 'Game total' : `${g[mk].name} team total`;
+    const num = (lb, value, kind) => { const c = h('span'); c.append(document.createTextNode(`${lb} `), h('b', kind, value)); return c; };
+    nums.append(num(mk === 'total' ? 'Book' : 'Book, implied', end ? f1(end.book) : '–', 'book'), num('Fair', end ? f1(end.fair) : '–', 'fair'), num('Gap', end ? signed(end.gap) : '–', 'gap'));
+    card.append(h('span', 'tp-title', title), plot, nums, h('span', 'tp-say', excursion(sm, mk === 'total' ? S.sigma : null)));
+    card.addEventListener('click', () => go(gameHash(g.id, mk)));
+    return [card, () => trendPanel(plot, { series: sm, threshold: RULES.buyEdge, sigma: mk === 'total' ? S.sigma : null, label: title, signals: signals.filter((x) => x.market === mk) })];
+  });
+  $('#mk-wall').replaceChildren(...cards.map((c) => c[0]));
+  for (const c of cards) c[1]();
   const label = (s) => (s.market === 'total' ? 'Game total' : `${g[s.market].name} team total`);
   $('#sig-rows').replaceChildren(...signals.map((s) => {
     const tr = document.createElement('tr');
@@ -465,7 +530,15 @@ function renderPulse() {
   const rec = S.recordedAt ? `, recorder ${Math.max(0, Math.round((Date.now() / 1000 - S.recordedAt) / 60))} min ago` : '';
   p.replaceChildren(h('b', '', isToday() ? `${live} live` : dayLabel(S.date)), document.createTextNode(`, scores ${age}s ago`), h('span', 'wide', rec));
 }
-function render() { S.memo.clear(); renderPulse(); if (S.view === 'board') renderBoard(); if (S.view === 'game') renderGame(); if (S.view === 'record') renderRecord(); }
+/** The slate's standard deviation of the gap, kept current for every view that draws a trend panel. */
+function updateSigma() {
+  if (!S.model) return;
+  const gaps = [];
+  for (const g of S.games.values()) for (const p of series(g)) if (p.t >= RULES.measureFrom && p.t <= RULES.measureTo) gaps.push(p.gap);
+  const st = gapStats(gaps, RULES.buyEdge);
+  S.sigma = st.n >= 30 ? st.sd : null;
+}
+function render() { S.memo.clear(); updateSigma(); renderPulse(); if (S.view === 'board') renderBoard(); if (S.view === 'game') renderGame(); if (S.view === 'record') renderRecord(); }
 
 async function refresh(force) {
   if (S.busy && !force) return;
@@ -490,6 +563,7 @@ $('#prev').addEventListener('click', () => go(boardHash(shiftDay(S.date, -1))));
 $('#next-day').addEventListener('click', () => go(boardHash(shiftDay(S.date, 1))));
 $('#today').addEventListener('click', () => go(boardHash(today())));
 $('#only').addEventListener('click', () => { S.only = !S.only; renderBoard(); });
+for (const b of document.querySelectorAll('#mode button')) b.addEventListener('click', () => { S.mode = b.dataset.mode; try { localStorage.setItem('csl.mode', S.mode); } catch { /* the choice just will not persist */ } S.memo.clear(); renderBoard(); });
 window.addEventListener('hashchange', applyRoute);
 let resizeTimer = 0;
 window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (S.view === 'game') renderGame(); if (S.view === 'board') renderBoard(); }, 120); });
@@ -513,7 +587,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 (async () => {
-  try { S.model = createModel(await getJSON('model.json?v=4')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  try { S.model = createModel(await getJSON('model.json?v=5')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
   window.cslBooted = true;
   await applyRoute();
   setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
