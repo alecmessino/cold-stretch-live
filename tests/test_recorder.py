@@ -80,7 +80,8 @@ class Recording(unittest.TestCase):
         self.assertIsInstance(json.load(open(os.path.join(self.dir.name, 'ledger.json'))), list)
         self.assertEqual(day['yardstick']['source'], 'model.json', 'no earlier slate, so the shipped yardstick is used and stored with the day')
         ladder = json.load(open(os.path.join(self.dir.name, 'ladder.json')))
-        self.assertEqual([r['k'] for r in ladder], list(record.LADDER))
+        self.assertEqual({r['rule'] for r in ladder}, {v[0] for v in record.VARIANTS})
+        self.assertEqual(len(ladder), len(record.VARIANTS) * len(record.STAGES))
 
     def test_threshold_is_in_deviations_and_price_aware(self):
         fair = lambda t, a, h: sum(record.fair(150, 0, t, a, h)[k] for k in ('fa', 'fh'))
@@ -96,10 +97,39 @@ class Recording(unittest.TestCase):
         for r in g['r']: r[6] = -170
         self.assertEqual(total(), [], 'a steep price cancels it')
 
+    def test_a_signal_needs_the_reading_before_it_to_be_armed(self):
+        fair = lambda t, a, h: sum(record.fair(150, 0, t, a, h)[k] for k in ('fa', 'fh'))
+        sigma = lambda t: record.YARD['total'] * record.coef(t)['sd_total']
+        def game(devs):
+            g = dict(id='g', date='20261117', away='Away U', home='Home St', pre=[150, 0], final=None, r=[])
+            for i, d in enumerate(devs):
+                t = 20 + i; a, h = 30 + i, 32 + i
+                g['r'].append([i * 60, t, a, h, fair(t, a, h) - d * sigma(t), 0, -110, -110])
+            return g
+        total = lambda g, **kw: [s for s in record.signals_for(g, **kw) if s['mkt'] == 'total']
+        self.assertEqual(total(game([0, 2.3, 0])), [], 'one reading at 2.3 with nothing before it')
+        self.assertEqual([s['t'] for s in total(game([0, 1.6, 2.3]))], [22], '1.6 then 2.3 fires on the second')
+        self.assertEqual(total(game([0, 1.6, 1.9, 1.7])), [], 'armed but never reaches 2')
+        self.assertEqual(total(game([0, -1.8, 2.3])), [], 'armed on the other side does not count')
+        self.assertEqual([s['t'] for s in total(game([0, 2.3, 0]), arm=None)], [21], 'the one-reading variant')
+        self.assertEqual([s['t'] for s in total(game([0, 1.6, 1.7]), k=1.5, arm=1.5)], [22], 'the 1.5 twice variant')
+
+    def test_stored_slates_are_judged_again_when_the_rules_change(self):
+        self.add(0, 10, 15, 15, 150.5)
+        self.add(60, 11, 17, 15, 150.5)
+        self.store.save()
+        json.dump([{'date': '20261117', 'k': 2.0, 'n': 9}], open(os.path.join(self.dir.name, 'ladder.json'), 'w'))   # a ladder from older rules
+        self.assertTrue(record.migrate(self.dir.name))
+        ladder = json.load(open(os.path.join(self.dir.name, 'ladder.json')))
+        self.assertTrue(all('rule' in r for r in ladder))
+        self.assertEqual(json.load(open(os.path.join(self.dir.name, 'rules.json')))['version'], record.RULES_VERSION)
+        self.assertEqual(len(json.load(open(os.path.join(self.dir.name, 'tracks', '20261117.json')))['games'][0]['r']), 2, 'readings are untouched')
+        self.assertFalse(record.migrate(self.dir.name), 'and it only runs once per rules version')
+
     def test_yardstick_comes_from_earlier_slates_only(self):
         import random; random.seed(7)
         for i in range(320):
-            t = 5 + i * 0.09; a = h = int(t * 1.8)
+            t = 4 + i * 0.1; a = h = int(t * 1.8)
             f = sum(record.fair(150, 0, t, a, h)[k] for k in ('fa', 'fh'))
             self.store.add('20261117', 'g1', 'Away U', 'Home St', None, None, [150, 0], 'Live', None, [i * 60, round(t, 2), a, h, round((f + random.gauss(0, 2)) * 2) / 2, 0, -110, -110])
         self.store.save()

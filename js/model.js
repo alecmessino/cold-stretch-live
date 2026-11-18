@@ -5,16 +5,17 @@ export const RULES = Object.freeze({
   // Thresholds are in deviations: fair minus book, divided by the usual size of that gap for the time left.
   // One deviation = yardstick x the model's rest-of-game standard deviation at that minute, so it is about
   // 2.1 points at minute 8 and 1.3 at minute 32 for a game total. A fixed number of points is not used anywhere.
-  buyDev: 2, // deviations needed for a signal
+  buyDev: 2, // deviations a reading needs to be a signal...
+  armDev: 1.5, // ...when the reading before it, about a minute earlier, was already this far out on the same side
   leanDev: 1.5,
   margin: 0.05, // and the chance must beat the price's break-even by this much
-  firstMinute: 4, // signals only between these elapsed minutes
-  lastMinute: 34,
+  firstMinute: 3, // signals only between these elapsed minutes
+  lastMinute: 37,
   blowoutLead: 15, // no signals at or beyond this lead
   blowoutSpread: 20, // or this pregame spread
   staleMs: 100000, // a live line older than this is not acted on
-  measureFrom: 4, // the slate summary counts readings between these minutes (the recorder uses the same window)
-  measureTo: 36,
+  measureFrom: 3, // the slate summary and the yardstick count readings between these minutes (the recorder uses the same window)
+  measureTo: 37,
 });
 
 /**
@@ -129,7 +130,8 @@ export function createModel(json) {
    * One reading against the model. bookTotal and bookSpread are DraftKings' live total and home spread, or null.
    * Returns, per market, the line, the fair number, the edge (fair minus line) in points and in deviations (`dev`),
    * the points one deviation is worth right now (`sigma`), the chance of the over, and the signal the reading earns
-   * on its own: 'buy', 'lean' or null. A buy still has to repeat (see signalsFor).
+   * on its own: 'buy', 'lean' or null. A buy still needs the reading before it to have been armed (see signalsFor).
+   * `reach` is how far out the reading counts for arming: its deviations, or 0 when the price leaves no room.
    * opts: { yard, buyDev, overPrice, underPrice }. Prices are American odds for the game total; -115 is assumed when absent.
    */
   function judge(pre, t, awayPts, homePts, bookTotal, bookSpread, opts = {}) {
@@ -154,7 +156,8 @@ export function createModel(json) {
         m.price = quoted == null ? -115 : quoted;
         m.quoted = quoted != null;
         const size = Math.abs(m.dev);
-        if (eligible && size >= buyDev && m.chance >= breakEven(m.price) + RULES.margin) m.signal = 'buy';
+        m.reach = eligible && m.chance >= breakEven(m.price) + RULES.margin ? size : 0;
+        if (m.reach >= buyDev) m.signal = 'buy';
         else if (eligible && size >= RULES.leanDev) m.signal = 'lean';
       }
       markets[k] = m;
@@ -163,14 +166,15 @@ export function createModel(json) {
   }
 
   /**
-   * Signals in a game's readings: the first time each market and side qualifies on two readings in a row.
-   * opts: { yard, buyDev } to judge against another slate's yardstick or another threshold.
+   * Signals in a game's readings: the first reading per market and side that is buyDev out when the reading before it
+   * was at least armDev out on the same side. opts: { yard, buyDev, armDev }; armDev null means one reading is enough.
    * readings: [[unixSeconds, elapsedMinutes, awayPts, homePts, bookTotal, bookSpread, overPrice, underPrice], ...]
    * finals: {away, home} once the game is over, else null.
    */
   function signalsFor(pre, readings, finals, opts = {}) {
     const fired = new Set();
     const out = [];
+    const armDev = opts.armDev === undefined ? RULES.armDev : opts.armDev;
     let prev = {};
     for (const r of readings) {
       if (r[4] == null || r[5] == null) { prev = {}; continue; }
@@ -178,10 +182,11 @@ export function createModel(json) {
       const cur = {};
       for (const k of ['total', 'away', 'home']) {
         const m = j.markets[k];
-        if (m.signal !== 'buy') continue;
-        cur[k] = m.side;
+        if (!m.reach) continue;
+        cur[k] = { side: m.side, reach: m.reach };
         const key = k + m.side;
-        if (prev[k] !== m.side || fired.has(key)) continue;
+        const armed = armDev == null || (prev[k] && prev[k].side === m.side && prev[k].reach >= armDev);
+        if (m.signal !== 'buy' || !armed || fired.has(key)) continue;
         fired.add(key);
         const final = finals ? (k === 'total' ? finals.away + finals.home : finals[k]) : null;
         out.push({

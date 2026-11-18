@@ -14,8 +14,13 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SB = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=%s&groups=50&limit=400&_=%d"
 OD = "https://sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball/events/%s/competitions/%s/odds?limit=20&_=%d"
 # Thresholds are in deviations: (fair minus book) / (yardstick x the model's rest-of-game standard deviation at that minute).
-BUY_DEV, MARGIN, T0, T1, BLOW_LEAD, BLOW_SPREAD = 2.0, 0.05, 4, 34, 15, 20
-M0, M1, MIN_YARD_READINGS, LADDER = 4, 36, 300, (1.0, 1.5, 2.0, 2.5, 3.0)
+# The signal: a reading BUY_DEV out when the reading before it (about a minute earlier) was already ARM_DEV out on the same side.
+BUY_DEV, ARM_DEV, MARGIN, T0, T1, BLOW_LEAD, BLOW_SPREAD = 2.0, 1.5, 0.05, 3, 37, 15, 20
+M0, M1, MIN_YARD_READINGS = 3, 37, 300
+# Every rule is run on every slate so the choice can be judged on results: (id, trigger, level the previous reading must hold; None = one reading is enough).
+VARIANTS = (('signal', BUY_DEV, ARM_DEV), ('2x2', 2.0, 2.0), ('1.5x2', 1.5, 1.5), ('1x2', 1.0, 1.0), ('2x1', 2.0, None), ('2.5x1', 2.5, None), ('3x1', 3.0, None))
+STAGES = (('all', 0, 41), ('3 to 20', 0, 20), ('20 to 34', 20, 34), ('34 to 37', 34, 41))
+RULES_VERSION = '2026-11-18.2'   # change this whenever a rule, window or variant changes: the recorder then re-judges every stored slate when it next starts
 MODEL = json.load(open(os.path.join(ROOT, 'model.json')))
 ROWS = {r['minute']: r for r in MODEL['rows']}; CDF = MODEL['cdf']; YARD = {k: MODEL['yardstick'][k] for k in ('total', 'team')}
 
@@ -84,16 +89,17 @@ def slate_date(now=None):
     now = now or datetime.datetime.now(datetime.timezone.utc)
     return (now - datetime.timedelta(hours=10)).strftime('%Y%m%d')
 
-def signals_for(g, yard=None, k=BUY_DEV):
-    """First reading per market and side that sits k deviations from fair on two readings in a row, at a price the chance clears.
+def signals_for(g, yard=None, k=BUY_DEV, arm=ARM_DEV):
+    """First reading per market and side that sits k deviations from fair, at a price the chance clears, when the reading
+    before it was at least `arm` deviations out on the same side (arm=None: no earlier reading needed).
     Team totals are implied from the live total and spread."""
     yard = yard or YARD
     if not g.get('pre'): return []
-    tot, hsp = g['pre']; out = []; fired = set(); fin = g.get('final'); prev_ok = set()
+    tot, hsp = g['pre']; out = []; fired = set(); fin = g.get('final'); prev_ok = {}
     if abs(hsp) >= BLOW_SPREAD: return []
     for ts, t, a, h, bt, bs, op, up in g['r']:
-        if bt is None or bs is None or not (T0 <= t <= T1) or abs(a - h) >= BLOW_LEAD: prev_ok = set(); continue
-        now_ok = set()
+        if bt is None or bs is None or not (T0 <= t <= T1) or abs(a - h) >= BLOW_LEAD: prev_ok = {}; continue
+        now_ok = {}
         f = fair(tot, hsp, t, a, h); ft = f['fa'] + f['fh']
         mk = [('total', 'Game total', ft, bt, f['sd_total'], (f['ashort'] + f['hshort']) >= 5, op, up, None if not fin else fin[0] + fin[1]),
               ('away', g['away'] + ' team total', f['fa'], bt / 2 + bs / 2, f['sd_team'], f['ashort'] >= 3, None, None, None if not fin else fin[0]),
@@ -102,8 +108,10 @@ def signals_for(g, yard=None, k=BUY_DEV):
             p_over = 1 - cdf((line - fv) / sd); sigma = (yard['total'] if key == 'total' else yard['team']) * sd; dev = (fv - line) / sigma
             for side, p, price in (('Over', p_over, o_price), ('Under', 1 - p_over, u_price)):
                 paid = price if price is not None else -115
-                if (dev >= k if side == 'Over' else dev <= -k) and p >= break_even(paid) + MARGIN: now_ok.add((key, side))
-                if (key, side) in now_ok and (key, side) in prev_ok and (key, side) not in fired:   # must hold on two readings in a row
+                size = dev if side == 'Over' else -dev
+                if size <= 0 or p < break_even(paid) + MARGIN: continue
+                now_ok[(key, side)] = size
+                if size >= k and (arm is None or prev_ok.get((key, side), 0) >= arm) and (key, side) not in fired:
                     fired.add((key, side))
                     res = 'Pending' if final is None else 'Push' if final == line else 'Won' if (final > line) == (side == 'Over') else 'Lost'
                     out.append(dict(id=f"{g['id']}|{key}|{side}", date=g['date'], game=g['id'], matchup=f"{g['away']} at {g['home']}", mkt=key, market=market, side=side,
@@ -148,18 +156,38 @@ class Store:
             json.dump({'date': date, 'updated': int(time.time()), 'yardstick': yard, 'games': gl}, open(self.path(date), 'w'), separators=(',', ':'))
             ledger = [s for s in ledger if s['date'] != date] + [s for g in gl for s in signals_for(g, yard)]
             ladder = [r for r in ladder if r['date'] != date]
-            for k in LADDER:   # what each threshold would have done, so the choice of threshold can be judged on results
-                sig = [s for g in gl for s in signals_for(g, yard, k)]; res = [s['result'] for s in sig]
-                ladder.append(dict(date=date, k=k, n=len(sig), won=res.count('Won'), lost=res.count('Lost'), push=res.count('Push'), open=res.count('Pending'),
-                                   units=round(sum(units(s['price']) if s['result'] == 'Won' else -1 if s['result'] == 'Lost' else 0 for s in sig), 2)))
+            for rule, k, arm in VARIANTS:   # what each rule would have done, overall and by stage of the game
+                every = [s for g in gl for s in signals_for(g, yard, k, arm)]
+                for stage, lo, hi in STAGES:
+                    sig = [s for s in every if lo <= s['t'] < hi]; res = [s['result'] for s in sig]
+                    ladder.append(dict(date=date, rule=rule, stage=stage, n=len(sig), won=res.count('Won'), lost=res.count('Lost'), push=res.count('Push'), open=res.count('Pending'),
+                                       units=round(sum(units(s['price']) if s['result'] == 'Won' else -1 if s['result'] == 'Lost' else 0 for s in sig), 2)))
             rows = [d for g in gl for d in devs_of(g)]; n = len(rows)
             index[date] = dict(date=date, games=sum(1 for g in gl if g['r']), readings=sum(len(g['r']) for g in gl), total_readings=n,
                                gap_abs=round(sum(abs(d[3]) for d in rows) / n, 2) if n else None, gap_mean=round(sum(d[3] for d in rows) / n, 2) if n else None,
                                dev_low=round(100 * sum(d[0] / yard['total'] >= BUY_DEV for d in rows) / n, 1) if n else None,
                                dev_high=round(100 * sum(d[0] / yard['total'] <= -BUY_DEV for d in rows) / n, 1) if n else None, yard_total=yard['total'])
-        json.dump(sorted(ladder, key=lambda r: (r['date'], r['k'])), open(ladder_path, 'w'), separators=(',', ':'))
+        json.dump(sorted(ladder, key=lambda r: r['date']), open(ladder_path, 'w'), separators=(',', ':'))
         json.dump(sorted(ledger, key=lambda s: (s['date'], s['ts'])), open(ledger_path, 'w'), separators=(',', ':'))
         json.dump(sorted(index.values(), key=lambda d: d['date']), open(index_path, 'w'), separators=(',', ':'))
+
+def migrate(out):
+    """If the stored results were judged under other rules, judge every stored slate again from its readings.
+    Readings are never changed; yardsticks, ledger, ladder and daily summaries are rebuilt. Returns True if it ran."""
+    path = os.path.join(out, 'rules.json')
+    try: current = json.load(open(path)).get('version')
+    except Exception: current = None
+    if current == RULES_VERSION: return False
+    store = Store(out); tdir = os.path.join(out, 'tracks')
+    for name in sorted(os.listdir(tdir)):
+        if name.endswith('.json'): store.day(name[:-5])
+    store.yards.clear()
+    for stale in ('ladder.json', 'ledger.json', 'index.json'):
+        try: os.remove(os.path.join(out, stale))
+        except OSError: pass
+    store.save()
+    json.dump({'version': RULES_VERSION, 'signal': {'deviations': BUY_DEV, 'armed_at': ARM_DEV, 'margin': MARGIN, 'minutes': [T0, T1]}}, open(path, 'w'))
+    return True
 
 def odds_for(ev_id):
     pre = live = None
@@ -205,12 +233,14 @@ def push(out):
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--out', default='store'); ap.add_argument('--minutes', type=float, default=335)
-    ap.add_argument('--push', action='store_true'); ap.add_argument('--import-jsonl'); ap.add_argument('--rebuild', action='store_true')
+    ap.add_argument('--push', action='store_true'); ap.add_argument('--import-jsonl'); ap.add_argument('--rebuild', action='store_true'); ap.add_argument('--reyard', default='')
     a = ap.parse_args(); store = Store(a.out)
     if a.rebuild:   # recompute the ledger, ladder and summaries of every stored slate with the current rules
         for name in sorted(os.listdir(os.path.join(a.out, 'tracks'))):
             if name.endswith('.json'): store.day(name[:-5])
+        for date in a.reyard.split(','): store.yards.pop(date, None)   # --reyard DATE,DATE: measure those slates' yardsticks again
         store.save(); return
+    if not a.import_jsonl and migrate(a.out): print('stored slates judged again under rules', RULES_VERSION, flush=True)
     if a.import_jsonl:
         for line in open(a.import_jsonl):
             s = json.loads(line); date = slate_date(datetime.datetime.fromtimestamp(s['ts'], datetime.timezone.utc))

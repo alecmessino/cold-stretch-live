@@ -54,15 +54,17 @@ Gaps are measured in **deviations**, not points. One deviation is the usual dist
     deviation = yardstick x the model's rest-of-game standard deviation at that minute
 
 - The rest-of-game standard deviation comes from the 16,086-game fit. It falls from about 15 points at minute 4 to 8 at minute 34, so a point of gap is worth more late than early. A fixed 2.5 points meant a 58% chance at minute 4 and 64% at minute 34.
-- The yardstick is how big the gap usually is as a share of that: 0.144 for game totals on the first recorded slate. The recorder re-estimates it from every completed slate and stores it with each day, so a slate is never judged with its own data.
-- For a game total, one deviation is about 2.1 points at minute 8, 1.7 at halftime and 1.3 at minute 32.
+- The yardstick is how big the gap usually is as a share of that: 0.149 for game totals on the first recorded slate. The recorder re-estimates it from every completed slate and stores it with each day, so a slate is never judged with its own data.
+- For a game total, one deviation is about 2.2 points at minute 8, 1.8 at halftime and 1.3 at minute 32.
 
-A signal is the first time a market sits **2 or more deviations from fair on two readings in a row**, at a price the model's chance still beats by five points over break-even. Only between minute 4 and minute 34, never at a 15-point lead, never on a 20-point pregame spread. Two deviations is about a 63% chance. Both sides are logged:
+A signal is a reading **2 or more deviations from fair when the reading before it, about a minute earlier, was already 1.5 out on the same side**, at a price the model's chance still beats by five points over break-even. Only between minute 3 and minute 37, never at a 15-point lead, never on a 20-point pregame spread. Two deviations is about a 63% chance. Both sides are logged:
 
 - **Over**: the book is under fair. This is the cold-stretch case.
 - **Under**: the book is over fair, usually a hot pace carried too far.
 
-The recorder also runs the same rule at 1, 1.5, 2.5 and 3 deviations and keeps the results (`ladder.json`), so the threshold can be judged on outcomes.
+Readings are about a minute apart, so the rule asks a gap to last a minute, not several. That matters: on the first slate only 22% of readings 2 deviations out were still out a reading later, which is what a lagging feed looks like.
+
+The recorder runs seven rules on every slate (the signal; 2, 1.5 and 1 deviations twice in a row; 2, 2.5 and 3 deviations on a single reading) and splits each by stage of the game (`ladder.json`), so the rule can be chosen on outcomes.
 
 Game totals are settled at DraftKings' live price. Team totals are implied from the live total and spread, (total ± spread) / 2, and priced at an estimated -115, because the feed carries no posted team-total market.
 

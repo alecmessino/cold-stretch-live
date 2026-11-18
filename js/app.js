@@ -2,9 +2,9 @@
 // Every local file is requested with the same ?v= release number, so a browser or CDN can never pair one release's
 // page with another's scripts. Bump it everywhere on release; tests/release.test.mjs fails if the numbers disagree.
 
-import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=6';
-import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=6';
-import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=6';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=7';
+import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=7';
+import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=7';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -141,7 +141,7 @@ function standing(g) {
   let best = null;
   for (const k of ['total', 'away', 'home']) {
     const m = j.markets[k];
-    m.confirmed = m.signal === 'buy' && !!before && before.markets[k].signal === 'buy' && before.markets[k].side === m.side;
+    m.confirmed = m.signal === 'buy' && !!before && before.markets[k].side === m.side && before.markets[k].reach >= RULES.armDev;
     const weight = m.signal === 'buy' ? (m.confirmed ? 3 : 2) : m.signal === 'lean' ? 1 : 0;
     if (weight && (!best || weight > best.weight || (weight === best.weight && m.chance > best.chance))) best = { ...m, key: k, weight };
   }
@@ -159,8 +159,8 @@ function word(g, st) {
   if (g.minute < RULES.firstMinute) return [`Before minute ${RULES.firstMinute}`, ''];
   if (g.minute > RULES.lastMinute) return [`Past minute ${RULES.lastMinute}`, ''];
   if (Math.abs(g.away.pts - g.home.pts) >= RULES.blowoutLead) return [`Lead over ${RULES.blowoutLead}`, ''];
-  if (b && b.weight === 2) return [`${b.side}${where}, if it holds`, 'is-live'];
-  if (b) return [`Lean ${b.side.toLowerCase()}${where}`, 'is-live'];
+  if (b && b.weight === 2) return [`${b.side}${where}, one more reading`, 'is-live'];
+  if (b) return [`Armed, ${b.side.toLowerCase()}${where}`, 'is-live'];
   return ['In window', 'is-live'];
 }
 
@@ -313,15 +313,15 @@ function renderLead(all) {
   let head, sub;
   if (!S.scoresAt) [head, sub] = ['Loading the slate.', ''];
   else if (!st.n && !all.length) [head, sub] = ['No games on this date.', ''];
-  else if (!st.n && isToday() && live) [head, sub] = [`${plural(live, 'game')} in progress. The first lines are coming in.`, 'The figures fill in as DraftKings posts live totals. Each game is measured from minute 4.'];
-  else if (!st.n && ahead.length && !all.some((g) => g.state === 'post')) [head, sub] = [`${plural(ahead.length, 'game')} on the slate. The first tips at ${timeLabel(ahead[0].start)}.`, 'The board fills in at tip-off. Each game is measured from minute 4.'];
-  else if (!st.n && isToday() && ahead.length) [head, sub] = [`${plural(ahead.length, 'game')} still to tip. The next is at ${timeLabel(ahead[0].start)}.`, 'No live line has been recorded yet today. Each game is measured from minute 4.'];
+  else if (!st.n && isToday() && live) [head, sub] = [`${plural(live, 'game')} in progress. The first lines are coming in.`, `The figures fill in as DraftKings posts live totals. Each game is measured from minute ${RULES.measureFrom}.`];
+  else if (!st.n && ahead.length && !all.some((g) => g.state === 'post')) [head, sub] = [`${plural(ahead.length, 'game')} on the slate. The first tips at ${timeLabel(ahead[0].start)}.`, `The board fills in at tip-off. Each game is measured from minute ${RULES.measureFrom}.`];
+  else if (!st.n && isToday() && ahead.length) [head, sub] = [`${plural(ahead.length, 'game')} still to tip. The next is at ${timeLabel(ahead[0].start)}.`, `No live line has been recorded yet today. Each game is measured from minute ${RULES.measureFrom}.`];
   else if (!st.n) [head, sub] = ['No live lines were recorded for this slate.', 'ESPN drops the live line at the final whistle, so a slate can only be measured while the recorder is running.'];
   else {
     const when = isToday() ? 'today' : `on ${new Date(toUTC(S.date)).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })}`;
     const lean = st.high >= 3 && st.high >= 2 * st.low ? ' When it missed, it was mostly too high.' : st.low >= 3 && st.low >= 2 * st.high ? ' When it missed, it was mostly too low.' : st.high + st.low < 3 ? ' It rarely missed by much.' : ' It missed in both directions.';
     head = `DraftKings’ live total ${isToday() ? 'has sat' : 'sat'} ${st.abs.toFixed(1)} points from fair ${when}.${lean}`;
-    sub = `A cold-stretch buy needs the book ${RULES.buyDev} deviations too low. That was true on ${st.low.toFixed(1)}% of ${plural(st.n, 'reading')}. ${signals ? `${plural(signals, 'signal')} held for two readings in a row.` : 'No gap has held for two readings in a row, so the record for this slate is empty.'}`;
+    sub = `A cold-stretch buy needs the book ${RULES.buyDev} deviations too low. That was true on ${st.low.toFixed(1)}% of ${plural(st.n, 'reading')}. ${signals ? `${plural(signals, 'signal')} fired.` : 'Nothing has qualified as a signal, so the record for this slate is empty.'}`;
   }
   $('#lead-head').textContent = head;
   $('#lead-sub').textContent = sub; $('#lead-sub').hidden = !sub;
@@ -330,7 +330,7 @@ function renderLead(all) {
   $('#fig-high').textContent = st.n ? `${st.high.toFixed(1)}%` : '–';
   $('#fig-sig').textContent = st.n ? String(signals) : '–';
   const y = yard(), pts = (t) => (y.total * S.model.coef(t).sd_total).toFixed(1);
-  $('#sigma-note').textContent = `One deviation is the usual gap between book and fair for the time left: ${pts(8)} points at minute 8, ${pts(20)} at halftime, ${pts(32)} at minute 32. A signal needs ${RULES.buyDev}, twice in a row.${y.readings ? ` Measured on ${y.readings} readings through ${dayLabel(y.through)}.` : ''}`;
+  $('#sigma-note').textContent = `One deviation is the usual gap between book and fair for the time left: ${pts(8)} points at minute 8, ${pts(20)} at halftime, ${pts(32)} at minute 32. A signal is a reading at ${RULES.buyDev} or more when the one before it, about a minute earlier, was already at ${RULES.armDev}.${y.readings ? ` Measured on ${y.readings} readings through ${dayLabel(y.through)}.` : ''}`;
   $('#hist-title').textContent = st.n ? `All ${plural(st.n, 'reading')}` : 'All readings';
   $('#hist-note').textContent = st.n ? `Every recorded line between minute ${RULES.measureFrom} and minute ${RULES.measureTo}, across ${plural(measured, 'game')}.` : 'The distribution fills in as lines are recorded.';
   return devs;
@@ -395,8 +395,8 @@ function sentence(g, st, k, book) {
   const gap = `${f1(Math.abs(m.edge))} ${m.edge >= 0 ? 'low' : 'high'}`, far = `${Math.abs(m.dev).toFixed(1)} deviations`;
   const lead = `DraftKings has ${name} at ${f1(m.line)}${k === 'total' ? '' : ' (implied)'}. Fair is ${f1(m.fair)}, so the book is ${gap}: ${far}.`;
   if (m.signal === 'buy' && m.confirmed) return [`${lead} The ${m.side.toLowerCase()} has a ${Math.round(m.chance * 100)}% chance. Signal: ${m.side.toLowerCase()}.`, m.side === 'Over' ? 'is-over' : 'is-under'];
-  if (m.signal === 'buy') return [`${lead} The ${m.side.toLowerCase()} has a ${Math.round(m.chance * 100)}% chance. It becomes a signal if the next reading agrees.`, ''];
-  if (m.signal === 'lean') return [`${lead} Leaning ${m.side.toLowerCase()}, short of the ${RULES.buyDev} a signal needs.`, ''];
+  if (m.signal === 'buy') return [`${lead} The ${m.side.toLowerCase()} has a ${Math.round(m.chance * 100)}% chance. The reading before it was under ${RULES.armDev} deviations, so it needs one more to count.`, ''];
+  if (m.signal === 'lean') return [`${lead} That arms the ${m.side.toLowerCase()}: a reading at ${RULES.buyDev} next makes it a signal.`, ''];
   if (!st.eligible) {
     const why = g.minute < RULES.firstMinute ? `before minute ${RULES.firstMinute}` : g.minute > RULES.lastMinute ? `after minute ${RULES.lastMinute}` : Math.abs(st.pre[1]) >= RULES.blowoutSpread ? `on a ${RULES.blowoutSpread}-point spread` : `at a ${RULES.blowoutLead}-point lead`;
     return [`${lead} No signals ${why}.`, ''];
@@ -500,6 +500,15 @@ function renderGame() {
 }
 
 /* ---------- record ---------- */
+const RULE_LABELS = {
+  signal: `${RULES.buyDev} deviations, after ${RULES.armDev} a minute earlier: the signal`,
+  '2x2': '2 deviations, two readings in a row',
+  '1.5x2': '1.5 deviations, two readings in a row',
+  '1x2': '1 deviation, two readings in a row',
+  '2x1': '2 deviations, a single reading',
+  '2.5x1': '2.5 deviations, a single reading',
+  '3x1': '3 deviations, a single reading',
+};
 function renderRecord() {
   const L = S.ledger.slice().sort((a, b) => b.ts - a.ts);
   const tally = (rows) => { const w = rows.filter((s) => s.result === 'Won').length, l = rows.filter((s) => s.result === 'Lost').length; return w + l ? `${w}–${l}` : '–'; };
@@ -521,14 +530,16 @@ function renderRecord() {
     return tr;
   }));
   $('#days-none').hidden = S.index.length > 0; $('#days-sheet').hidden = !S.index.length;
-  const ks = [...new Set(S.ladder.map((r) => r.k))].sort((a, b) => a - b);
-  $('#ladder-rows').replaceChildren(...ks.map((k) => {
-    const rows = S.ladder.filter((r) => r.k === k), sum = (f) => rows.reduce((t, r) => t + (r[f] || 0), 0);
-    const n = sum('n'), won = sum('won'), lost = sum('lost'), units = sum('units'), tr = document.createElement('tr');
-    for (const [v, c] of [[`${k} deviation${k === 1 ? '' : 's'}${k === RULES.buyDev ? ', the signal' : ''}`], [n, 'r'], [won + lost ? `${won}–${lost}` : '–', 'r'], [won + lost ? `${Math.round((100 * won) / (won + lost))}%` : '–', 'r'], [won + lost ? signed(units) : '–', 'r'], [sum('open') || '', 'r']]) tr.append(h('td', c || '', v));
+  const ladderRow = (label, rows) => {
+    const sum = (f) => rows.reduce((t, r) => t + (r[f] || 0), 0), n = sum('n'), w = sum('won'), l = sum('lost'), tr = document.createElement('tr');
+    for (const [v, c] of [[label], [n, 'r'], [w + l ? `${w}–${l}` : '–', 'r'], [w + l ? `${Math.round((100 * w) / (w + l))}%` : '–', 'r'], [w + l ? signed(sum('units')) : '–', 'r'], [sum('open') || '', 'r']]) tr.append(h('td', c || '', v));
     return tr;
-  }));
-  $('#ladder-none').hidden = ks.length > 0; $('#ladder-sheet').hidden = !ks.length;
+  };
+  const ladder = S.ladder.filter((r) => r.rule), have = (rule) => ladder.some((r) => r.rule === rule);
+  $('#ladder-rows').replaceChildren(...Object.entries(RULE_LABELS).filter(([rule]) => have(rule)).map(([rule, label]) => ladderRow(label, ladder.filter((r) => r.rule === rule && r.stage === 'all'))));
+  $('#ladder-none').hidden = ladder.length > 0; $('#ladder-sheet').hidden = !ladder.length;
+  $('#stage-rows').replaceChildren(...['3 to 20', '20 to 34', '34 to 37'].map((stage) => ladderRow(`Minutes ${stage}`, ladder.filter((r) => r.rule === 'signal' && r.stage === stage))));
+  $('#stage-block').hidden = !ladder.length;
   $('#ledger-rows').replaceChildren(...L.map((s) => {
     const tr = document.createElement('tr'); tr.tabIndex = 0;
     const price = `${s.price > 0 ? '+' : ''}${s.price}${s.priced === 'Assumed' ? ' est.' : ''}`;
@@ -599,7 +610,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 (async () => {
-  try { S.model = createModel(await getJSON('model.json?v=6')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  try { S.model = createModel(await getJSON('model.json?v=7')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
   window.cslBooted = true;
   await applyRoute();
   setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);

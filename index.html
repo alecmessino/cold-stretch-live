@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230F1B2D'/%3E%3Cpath d='M6 21h7v-6h6v-5h7' fill='none' stroke='%23F0843C' stroke-width='3'/%3E%3Cpath d='M6 17c7 0 12-2 20-9' fill='none' stroke='%237FA2FF' stroke-width='3'/%3E%3C/svg%3E">
 <link rel="preload" href="fonts/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/app.css?v=6">
+<link rel="stylesheet" href="css/app.css?v=7">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -55,7 +55,7 @@
         <div><dt>points between book and fair, on average</dt><dd id="fig-abs">–</dd></div>
         <div><dt>of readings had the book 2 or more deviations under fair</dt><dd id="fig-low">–</dd></div>
         <div><dt>of readings had the book 2 or more deviations over fair</dt><dd id="fig-high">–</dd></div>
-        <div><dt>signals held for two readings in a row</dt><dd id="fig-sig">–</dd></div>
+        <div><dt>signals: 2 deviations out, after 1.5 a minute earlier</dt><dd id="fig-sig">–</dd></div>
       </dl>
     </div>
 
@@ -88,7 +88,7 @@
     <div class="split">
       <section class="panel">
         <h2 id="hist-title">All readings</h2>
-        <p class="note" id="hist-note">Every recorded line between minute 4 and minute 36.</p>
+        <p class="note" id="hist-note">Every recorded line between minute 3 and minute 37.</p>
         <div class="hist" id="hist"></div>
       </section>
       <section>
@@ -164,7 +164,7 @@
     <div class="lead">
       <div class="lead-say">
         <h1 class="headline" id="rec-head">The record.</h1>
-        <p class="standfirst">Every signal the recorder has logged, settled against the final score. A signal is the first time a market sits 2 or more deviations from fair on two readings in a row, at a price the chance still beats by five points. Minutes 4 to 34 only, and never in a blowout.</p>
+        <p class="standfirst">Every signal the recorder has logged, settled against the final score. A signal is a reading 2 or more deviations from fair when the reading before it, about a minute earlier, was already 1.5 out on the same side, at a price the chance still beats by five points. Minutes 3 to 37 only, and never in a blowout.</p>
       </div>
     </div>
     <dl class="sums">
@@ -186,15 +186,26 @@
     </div>
 
     <div class="block">
-      <h2>What each threshold would have done</h2>
-      <p class="note">The same rule run at five distances from fair, so the threshold is judged on results and not picked by feel. One deviation is the usual gap between book and fair for the time left. November 17 is measured against itself; every later slate uses only the slates before it.</p>
+      <h2>What each rule would have done</h2>
+      <p class="note">Seven rules run on the same readings, so the rule is chosen on results and not by feel. Readings are about a minute apart. One deviation is the usual gap between book and fair for the time left. November 17 is measured against itself; every later slate uses only the slates before it.</p>
       <div class="sheet" id="ladder-sheet">
         <table>
-          <thead><tr><th>Distance from fair</th><th class="r">Signals</th><th class="r">Won–lost</th><th class="r">Win rate</th><th class="r">Units</th><th class="r">Open</th></tr></thead>
+          <thead><tr><th>Rule</th><th class="r">Signals</th><th class="r">Won–lost</th><th class="r">Win rate</th><th class="r">Units</th><th class="r">Open</th></tr></thead>
           <tbody id="ladder-rows"></tbody>
         </table>
       </div>
       <p class="quiet" id="ladder-none" hidden>Nothing recorded yet.</p>
+    </div>
+
+    <div class="block" id="stage-block">
+      <h2>The signal by stage of the game</h2>
+      <p class="note">If one stretch of the game carries the results, the rule should be narrowed to it.</p>
+      <div class="sheet">
+        <table>
+          <thead><tr><th>Stage</th><th class="r">Signals</th><th class="r">Won–lost</th><th class="r">Win rate</th><th class="r">Units</th><th class="r">Open</th></tr></thead>
+          <tbody id="stage-rows"></tbody>
+        </table>
+      </div>
     </div>
 
     <div class="block">
@@ -220,7 +231,7 @@
 </footer>
 
 <script src="vendor/d3.v7.9.2.min.js"></script>
-<script type="module" src="js/app.js?v=6"></script>
+<script type="module" src="js/app.js?v=7"></script>
 <script>
   // If the app has not started after ten seconds, say so instead of sitting on "Loading".
   setTimeout(function () {

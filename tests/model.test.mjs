@@ -59,6 +59,18 @@ test('drops readings whose game clock outruns the wall clock or runs backwards',
   assert.equal(isClockGlitch(at701, next), false);
 });
 
+test('a signal is a reading 2 out when the reading before it was already 1.5 out', () => {
+  const pre = [150, 0];
+  const game = (devs) => devs.map((d, i) => { const t = 20 + i, a = 30 + i, h = 32 + i, f = model.fair(pre, t, a, h).total, s = model.judge(pre, t, a, h, f, a - h).markets.total.sigma; return [i * 60, t, a, h, f - d * s, a - h, -110, -110]; });
+  const total = (devs, opts) => model.signalsFor(pre, game(devs), null, opts).filter((s) => s.market === 'total').map((s) => s.minute);
+  assert.deepEqual(total([0, 2.3, 0]), [], 'one reading at 2.3 with nothing before it');
+  assert.deepEqual(total([0, 1.6, 2.3]), [22], '1.6 then 2.3 fires on the second');
+  assert.deepEqual(total([0, 1.6, 1.9, 1.7]), [], 'armed but never reaches 2');
+  assert.deepEqual(total([0, -1.8, 2.3]), [], 'armed on the other side does not count');
+  assert.deepEqual(total([0, 2.3, 0], { armDev: null }), [21], 'the one-reading variant');
+  assert.deepEqual(total([0, 1.6, 1.7], { buyDev: 1.5, armDev: 1.5 }), [22], 'the 1.5 twice variant');
+});
+
 test('a signal needs two qualifying readings in a row, fires once, and settles on the final', () => {
   const pre = [150, 0];
   const fairAt = (t, a, h) => model.fair(pre, t, a, h).total;
