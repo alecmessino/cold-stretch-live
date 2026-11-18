@@ -1,8 +1,10 @@
 // Cold Stretch Live: state, polling, routing and rendering.
+// Every local file is requested with the same ?v= release number, so a browser or CDN can never pair one release's
+// page with another's scripts. Bump it everywhere on release; tests/release.test.mjs fails if the numbers disagree.
 
-import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js';
-import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js';
-import { rangePlot, histogram, gameChart, fmt } from './charts.js';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=4';
+import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=4';
+import { rangePlot, histogram, gameChart, fmt } from './charts.js?v=4';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -511,7 +513,8 @@ document.addEventListener('keydown', (e) => {
 });
 
 (async () => {
-  try { S.model = createModel(await getJSON('model.json')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  try { S.model = createModel(await getJSON('model.json?v=4')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  window.cslBooted = true;
   await applyRoute();
   setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
   setInterval(renderPulse, 5000);

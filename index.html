@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230F1B2D'/%3E%3Cpath d='M6 21h7v-6h6v-5h7' fill='none' stroke='%23F0843C' stroke-width='3'/%3E%3Cpath d='M6 17c7 0 12-2 20-9' fill='none' stroke='%237FA2FF' stroke-width='3'/%3E%3C/svg%3E">
 <link rel="preload" href="fonts/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/app.css?v=4">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -192,6 +192,15 @@
 </footer>
 
 <script src="vendor/d3.v7.9.2.min.js"></script>
-<script type="module" src="js/app.js"></script>
+<script type="module" src="js/app.js?v=4"></script>
+<script>
+  // If the app has not started after ten seconds, say so instead of sitting on "Loading".
+  setTimeout(function () {
+    if (window.cslBooted) return;
+    var p = document.getElementById('pulse');
+    p.className = 'pulse is-down';
+    p.textContent = 'The page did not finish loading. Reload to try again.';
+  }, 10000);
+</script>
 </body>
 </html>

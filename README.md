@@ -87,7 +87,7 @@ python3 -m http.server 8000
 ```
 
 ```sh
-node --test tests/model.test.mjs tests/espn.test.mjs tests/tokens.test.mjs
+node --test tests/model.test.mjs tests/espn.test.mjs tests/tokens.test.mjs tests/release.test.mjs
 python3 -m unittest discover -s tests
 python3 recorder/record.py --out store --minutes 5     # record five minutes of live games into ./store
 ```
