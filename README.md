@@ -49,10 +49,20 @@ The chance of an over comes from how far real games landed from the estimate, no
 
 ## Signals
 
-A signal is the first time a market sits **2.5 or more points from fair**, with **at least a 62% chance**, on **two readings in a row**. Only between minute 4 and minute 34, never at a 15-point lead, never on a 20-point pregame spread. Both sides are logged:
+Gaps are measured in **deviations**, not points. One deviation is the usual distance between the book and fair for the time left:
+
+    deviation = yardstick x the model's rest-of-game standard deviation at that minute
+
+- The rest-of-game standard deviation comes from the 16,086-game fit. It falls from about 15 points at minute 4 to 8 at minute 34, so a point of gap is worth more late than early. A fixed 2.5 points meant a 58% chance at minute 4 and 64% at minute 34.
+- The yardstick is how big the gap usually is as a share of that: 0.144 for game totals on the first recorded slate. The recorder re-estimates it from every completed slate and stores it with each day, so a slate is never judged with its own data.
+- For a game total, one deviation is about 2.1 points at minute 8, 1.7 at halftime and 1.3 at minute 32.
+
+A signal is the first time a market sits **2 or more deviations from fair on two readings in a row**, at a price the model's chance still beats by five points over break-even. Only between minute 4 and minute 34, never at a 15-point lead, never on a 20-point pregame spread. Two deviations is about a 63% chance. Both sides are logged:
 
 - **Over**: the book is under fair. This is the cold-stretch case.
 - **Under**: the book is over fair, usually a hot pace carried too far.
+
+The recorder also runs the same rule at 1, 1.5, 2.5 and 3 deviations and keeps the results (`ladder.json`), so the threshold can be judged on outcomes.
 
 Game totals are settled at DraftKings' live price. Team totals are implied from the live total and spread, (total ± spread) / 2, and priced at an estimated -115, because the feed carries no posted team-total market.
 

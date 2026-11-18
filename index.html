@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230F1B2D'/%3E%3Cpath d='M6 21h7v-6h6v-5h7' fill='none' stroke='%23F0843C' stroke-width='3'/%3E%3Cpath d='M6 17c7 0 12-2 20-9' fill='none' stroke='%237FA2FF' stroke-width='3'/%3E%3C/svg%3E">
 <link rel="preload" href="fonts/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/app.css?v=5">
+<link rel="stylesheet" href="css/app.css?v=6">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,8 +53,8 @@
       </div>
       <dl class="figures">
         <div><dt>points between book and fair, on average</dt><dd id="fig-abs">–</dd></div>
-        <div><dt>of readings had the book 2.5 or more under fair</dt><dd id="fig-low">–</dd></div>
-        <div><dt>of readings had the book 2.5 or more over fair</dt><dd id="fig-high">–</dd></div>
+        <div><dt>of readings had the book 2 or more deviations under fair</dt><dd id="fig-low">–</dd></div>
+        <div><dt>of readings had the book 2 or more deviations over fair</dt><dd id="fig-high">–</dd></div>
         <div><dt>signals held for two readings in a row</dt><dd id="fig-sig">–</dd></div>
       </dl>
     </div>
@@ -68,16 +68,16 @@
         </div>
       </div>
       <div id="trend-key">
-        <p class="gloss"><span><i class="k-line"></i>Three-minute average</span><span><i class="k-band"></i>Within 2.5: no trade</span><span><i class="k-low"></i>Book low: over side</span><span><i class="k-high"></i>Book high: under side</span><span id="key-sd"><i class="k-sd"></i>Two deviations</span></p>
+        <p class="gloss"><span><i class="k-line"></i>Three-minute average</span><span><i class="k-band"></i>Within 2 deviations: no trade</span><span><i class="k-low"></i>Book low: over side</span><span><i class="k-high"></i>Book high: under side</span></p>
         <p class="note" id="sigma-note"></p>
       </div>
-      <p class="note" id="table-key" hidden>Fair minus book. Dot: latest reading. Bar: the range since recording began.</p>
+      <p class="note" id="table-key" hidden>Fair minus book, in deviations. Dot: latest reading. Bar: the range since recording began.</p>
       <div class="wall" id="wall" hidden></div>
       <div class="panel stand" id="stand" hidden>
         <div class="stand-head" aria-hidden="true">
           <span>Game</span><span>Clock</span>
-          <span class="axis"><span class="z-l">Book high, under side</span><span class="z-r">Book low, over side</span><i style="left:0%">−5</i><i style="left:25%">−2.5</i><i style="left:50%">0</i><i style="left:75%">+2.5</i><i style="left:100%">+5</i></span>
-          <span class="r">Book</span><span class="r">Fair</span><span class="r">Gap</span><span class="r">Over</span><span>Status</span>
+          <span class="axis"><span class="z-l">Book high, under side</span><span class="z-r">Book low, over side</span><i style="left:0%">−4</i><i style="left:25%">−2</i><i style="left:50%">0</i><i style="left:75%">+2</i><i style="left:100%">+4</i></span>
+          <span class="r">Book</span><span class="r">Fair</span><span class="r">Gap</span><span class="r">Dev</span><span>Status</span>
         </div>
         <div id="stand-rows"></div>
       </div>
@@ -127,13 +127,14 @@
         <div class="book"><dt id="f-book-l">DraftKings live</dt><dd id="f-book">–</dd></div>
         <div class="fair"><dt id="f-fair-l">Fair</dt><dd id="f-fair">–</dd></div>
         <div><dt>Fair minus book</dt><dd id="f-gap">–</dd></div>
+        <div><dt id="f-sigma">Deviations</dt><dd id="f-dev">–</dd></div>
         <div><dt>Chance of the over</dt><dd id="f-over">–</dd></div>
         <div><dt>Pregame</dt><dd id="f-pre">–</dd></div>
         <div><dt>If this pace held</dt><dd id="f-pace">–</dd></div>
       </dl>
       <div class="panel chart-panel">
         <p class="legend">
-          <span><i class="k-book"></i>DraftKings live</span><span><i class="k-fair"></i>Fair</span><span><i class="k-pre"></i>Pregame</span>
+          <span><i class="k-book"></i>DraftKings live</span><span><i class="k-fair"></i>Fair</span><span><i class="k-zone"></i>Within 2 deviations of fair</span><span><i class="k-pre"></i>Pregame</span>
           <span><i class="k-away"></i><span id="lg-away">Away</span></span><span><i class="k-home"></i><span id="lg-home">Home</span></span>
         </p>
         <p class="scrub" id="scrub" aria-live="off"></p>
@@ -150,7 +151,7 @@
         <h2>Signals in this game</h2>
         <div class="sheet" id="sig-sheet">
           <table>
-            <thead><tr><th>Market</th><th>Side</th><th>Clock</th><th>Score</th><th class="r">Line</th><th class="r">Fair</th><th class="r">Chance</th><th class="r">Final</th><th>Result</th></tr></thead>
+            <thead><tr><th>Market</th><th>Side</th><th>Clock</th><th>Score</th><th class="r">Line</th><th class="r">Fair</th><th class="r">Deviations</th><th class="r">Chance</th><th class="r">Final</th><th>Result</th></tr></thead>
             <tbody id="sig-rows"></tbody>
           </table>
         </div>
@@ -163,7 +164,7 @@
     <div class="lead">
       <div class="lead-say">
         <h1 class="headline" id="rec-head">The record.</h1>
-        <p class="standfirst">Every signal the recorder has logged, settled against the final score. A signal is the first time a market sits 2.5 or more points from fair, with at least a 62% chance, on two readings in a row. Minutes 4 to 34 only, and never in a blowout.</p>
+        <p class="standfirst">Every signal the recorder has logged, settled against the final score. A signal is the first time a market sits 2 or more deviations from fair on two readings in a row, at a price the chance still beats by five points. Minutes 4 to 34 only, and never in a blowout.</p>
       </div>
     </div>
     <dl class="sums">
@@ -177,7 +178,7 @@
       <h2>How close the book runs to fair</h2>
       <div class="sheet" id="days-sheet">
         <table>
-          <thead><tr><th>Slate</th><th class="r">Games</th><th class="r">Line readings</th><th class="r">Average distance</th><th class="r">Book 2.5+ under fair</th><th class="r">Book 2.5+ over fair</th></tr></thead>
+          <thead><tr><th>Slate</th><th class="r">Games</th><th class="r">Line readings</th><th class="r">Average distance, points</th><th class="r">Book 2+ deviations under fair</th><th class="r">Book 2+ deviations over fair</th></tr></thead>
           <tbody id="days-rows"></tbody>
         </table>
       </div>
@@ -185,10 +186,22 @@
     </div>
 
     <div class="block">
+      <h2>What each threshold would have done</h2>
+      <p class="note">The same rule run at five distances from fair, so the threshold is judged on results and not picked by feel. One deviation is the usual gap between book and fair for the time left. November 17 is measured against itself; every later slate uses only the slates before it.</p>
+      <div class="sheet" id="ladder-sheet">
+        <table>
+          <thead><tr><th>Distance from fair</th><th class="r">Signals</th><th class="r">Won–lost</th><th class="r">Win rate</th><th class="r">Units</th><th class="r">Open</th></tr></thead>
+          <tbody id="ladder-rows"></tbody>
+        </table>
+      </div>
+      <p class="quiet" id="ladder-none" hidden>Nothing recorded yet.</p>
+    </div>
+
+    <div class="block">
       <h2>Ledger</h2>
       <div class="sheet" id="ledger-sheet">
         <table>
-          <thead><tr><th>Slate</th><th>Game</th><th>Market</th><th>Side</th><th>Clock</th><th>Score</th><th class="r">Line</th><th class="r">Price</th><th class="r">Fair</th><th class="r">Chance</th><th class="r">Final</th><th>Result</th></tr></thead>
+          <thead><tr><th>Slate</th><th>Game</th><th>Market</th><th>Side</th><th>Clock</th><th>Score</th><th class="r">Line</th><th class="r">Price</th><th class="r">Fair</th><th class="r">Deviations</th><th class="r">Chance</th><th class="r">Final</th><th>Result</th></tr></thead>
           <tbody id="ledger-rows"></tbody>
         </table>
       </div>
@@ -201,13 +214,13 @@
 <footer class="wrap">
   <div class="foot">
     <p>Scores and play-by-play come from ESPN. Lines are DraftKings’ pregame and live numbers as ESPN publishes them. ESPN drops the live line at the final whistle, so a recorder saves it every 30 seconds while games are on.</p>
-    <p>Fair is the current score plus a rest-of-game estimate fitted on 16,086 Division I games, 2022–23 through December 2025. It knows nothing about injuries, foul trouble or who is on the floor. This is information, not betting advice.</p>
+    <p>Fair is the current score plus a rest-of-game estimate fitted on 16,086 Division I games, 2022–23 through December 2025. It knows nothing about injuries, foul trouble or who is on the floor. Gaps are measured in deviations: the usual distance between book and fair for the time left, re-estimated from every completed slate. This is information, not betting advice.</p>
     <p><a href="https://github.com/alecmessino/cold-stretch-live">Source, model and recorded data</a></p>
   </div>
 </footer>
 
 <script src="vendor/d3.v7.9.2.min.js"></script>
-<script type="module" src="js/app.js?v=5"></script>
+<script type="module" src="js/app.js?v=6"></script>
 <script>
   // If the app has not started after ten seconds, say so instead of sitting on "Loading".
   setTimeout(function () {

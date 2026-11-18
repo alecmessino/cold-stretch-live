@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createModel, elapsed, clockLabel, isClockGlitch, gapStats, RULES } from '../js/model.js';
+import { createModel, elapsed, clockLabel, isClockGlitch, gapStats, breakEven, RULES } from '../js/model.js';
 
 const root = new URL('..', import.meta.url);
 const model = createModel(JSON.parse(readFileSync(new URL('model.json', root))));
@@ -16,10 +16,18 @@ test('matches the Python recorder on every fixture case', () => {
     close(j.fair.home, c.fair_home, 'fair home');
     close(j.fair.awayShort, c.away_short, 'away shortfall');
     close(j.fair.homeShort, c.home_short, 'home shortfall');
+    close(j.markets.total.dev, c.dev_total, 'deviations, total');
+    close(j.markets.away.dev, c.dev_away, 'deviations, away');
+    close(j.markets.home.dev, c.dev_home, 'deviations, home');
     close(j.markets.total.over, c.over_total, 'over chance, total');
     close(j.markets.away.over, c.over_away, 'over chance, away');
     close(j.markets.home.over, c.over_home, 'over chance, home');
   }
+});
+
+test('break-even rates match the recorder', () => {
+  for (const p of parity.prices) close(breakEven(p.price), p.break_even, `price ${p.price}`);
+  close(breakEven(-110), 110 / 210, 'a -110 price needs 52.4%');
 });
 
 test('reads ESPN clocks', () => {
@@ -71,6 +79,27 @@ test('a signal needs two qualifying readings in a row, fires once, and settles o
   const lost = model.signalsFor(pre, held, { away: Math.floor(line / 2) - 2, home: Math.floor(line / 2) - 2 }).find((s) => s.market === 'total');
   assert.equal(won.result, 'Won');
   assert.equal(lost.result, 'Lost');
+});
+
+test('the threshold is in deviations, so the points it takes shrink as the game runs out', () => {
+  const pre = [150, 0];
+  const pointsFor = (t, a, h) => model.judge(pre, t, a, h, 150, 0).markets.total.sigma * RULES.buyDev;
+  const early = pointsFor(8, 14, 14), late = pointsFor(32, 60, 60);
+  assert.ok(early > 3.8 && early < 4.8, `two deviations at minute 8: ${early.toFixed(2)} points`);
+  assert.ok(late > 2.2 && late < 3.0, `two deviations at minute 32: ${late.toFixed(2)} points`);
+  const at = (t, a, h, points) => { const f = model.fair(pre, t, a, h).total; return model.judge(pre, t, a, h, f - points, a - h).markets.total; };
+  assert.equal(at(8, 14, 14, 3.5).signal, 'lean', '3.5 points early is short of two deviations');
+  assert.equal(at(32, 60, 60, 3.5).signal, 'buy', '3.5 points late is beyond two deviations');
+  close(at(8, 14, 14, 3).dev, 3 / at(8, 14, 14, 3).sigma, 'dev is the gap over one deviation');
+});
+
+test('a steep price can cancel a signal, and another threshold can be asked for', () => {
+  const pre = [150, 0], t = 20, a = 30, h = 32, f = model.fair(pre, t, a, h).total;
+  const line = f - 2.2 * model.judge(pre, t, a, h, f, a - h).markets.total.sigma;
+  assert.equal(model.judge(pre, t, a, h, line, a - h, { overPrice: -110 }).markets.total.signal, 'buy');
+  assert.equal(model.judge(pre, t, a, h, line, a - h, { overPrice: -160 }).markets.total.signal, 'lean', '-160 needs 61.5% plus the margin');
+  assert.equal(model.judge(pre, t, a, h, line, a - h, { overPrice: -110, buyDev: 2.5 }).markets.total.signal, 'lean');
+  assert.equal(model.judge(pre, t, a, h, line, a - h, { yard: { total: 0.2, team: 0.2 } }).markets.total.signal, 'lean', 'a wider yardstick makes the same gap less unusual');
 });
 
 test('no signals in blowouts, on huge spreads, or outside the window', () => {

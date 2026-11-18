@@ -6,15 +6,15 @@ const signed = (v) => { if (v == null || !Number.isFinite(v)) return '–'; cons
 const tick = (v) => (v > 0 ? `+${v}` : v < 0 ? `−${Math.abs(v)}` : '0');
 
 /**
- * One row of the board: fair minus book on a fixed scale of 5 points each way.
+ * One row of the board: fair minus book in deviations, on a fixed scale.
  * The dot is the latest reading, the bar is the range seen so far, the tinted ends start at the signal threshold.
  */
-export function rangePlot({ gap, lo, hi, signal = false, span = 5, threshold = 2.5 }) {
+export function rangePlot({ gap, lo, hi, signal = false, span = 4, threshold = 2, unit = '' }) {
   const at = (v) => `${((Math.max(-span, Math.min(span, v)) + span) / (2 * span)) * 100}%`;
   const plot = document.createElement('span');
   plot.className = 'plot';
   plot.setAttribute('role', 'img');
-  plot.setAttribute('aria-label', gap == null ? 'No line to measure' : `Fair minus book ${signed(gap)}${lo != null && hi != null ? `, range ${signed(lo)} to ${signed(hi)}` : ''}`);
+  plot.setAttribute('aria-label', gap == null ? 'No line to measure' : `Fair minus book ${signed(gap)}${unit}${lo != null && hi != null ? `, range ${signed(lo)} to ${signed(hi)}` : ''}`);
   if (lo != null && hi != null && hi > lo) {
     const range = document.createElement('i');
     range.className = 'range';
@@ -32,23 +32,22 @@ export function rangePlot({ gap, lo, hi, signal = false, span = 5, threshold = 2
 }
 
 /**
- * A small multiple: fair minus book by game minute, on the same scale in every panel.
+ * A small multiple: fair minus book by game minute, in deviations, on the same scale in every panel.
  * The thin line is every reading and the bold line is its three-minute average.
  * The shaded band is "no trade". Where a reading leaves it, the space is filled: blue above (book low), orange below (book high).
- * Dotted lines sit two standard deviations out when a deviation is known.
  */
 export function trendPanel(host, d) {
-  const W = Math.max(220, host.clientWidth || 300), H = 172, m = { t: 8, r: 38, b: 20, l: 32 }, span = 6, thr = d.threshold;
+  const W = Math.max(220, host.clientWidth || 300), H = 172, m = { t: 8, r: 44, b: 20, l: 30 }, thr = d.threshold, span = d.span || 2 * thr, unit = d.unit || '';
+  const show = (v) => signed(v) + unit;
   const x = d3.scaleLinear([0, 40], [m.l, W - m.r]), y = d3.scaleLinear([-span, span], [H - m.b, m.t]).clamp(true);
   const pts = d.series, last = pts[pts.length - 1] || null;
   const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img')
-    .attr('aria-label', last ? `${d.label}: fair minus book by game minute, latest ${signed(last.gap)}` : `${d.label}: no line recorded`);
+    .attr('aria-label', last ? `${d.label}: fair minus book by game minute, latest ${show(last.gap)}` : `${d.label}: no line recorded`);
   // plot paper: a line every point and every five minutes
   svg.append('g').selectAll('line').data(d3.range(-span, span + 1)).join('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y).attr('y2', y).attr('stroke', 'var(--rule-soft)');
   svg.append('g').selectAll('line').data(d3.range(0, 41, 5)).join('line').attr('x1', x).attr('x2', x).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--rule-soft)');
   svg.append('rect').attr('x', m.l).attr('width', W - m.l - m.r).attr('y', y(thr)).attr('height', y(-thr) - y(thr)).attr('fill', 'var(--band)');
   for (const v of [-thr, 0, thr]) svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(v)).attr('y2', y(v)).attr('stroke', 'var(--rule-strong)');
-  if (d.sigma && 2 * d.sigma < span && Math.abs(2 * d.sigma - thr) > 0.3) for (const v of [-2 * d.sigma, 2 * d.sigma]) svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(v)).attr('y2', y(v)).attr('stroke', 'var(--faint)').attr('stroke-dasharray', '1 4').attr('stroke-linecap', 'round').attr('stroke-width', 1.5);
   svg.append('line').attr('x1', x(20)).attr('x2', x(20)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--rule-strong)').attr('stroke-dasharray', '2 4');
   svg.append('g').selectAll('text').data([[thr, tick(thr)], [0, '0'], [-thr, tick(-thr)]]).join('text').attr('x', m.l - 6).attr('y', (v) => y(v[0])).attr('dy', '0.32em').attr('text-anchor', 'end').text((v) => v[1]);
   svg.append('g').selectAll('text').data([[0, 'Tip', 'start'], [20, 'Half', 'middle'], [40, 'Final', 'end']]).join('text').attr('x', (v) => x(v[0])).attr('y', H - 5).attr('text-anchor', (v) => v[2]).text((v) => v[1]);
@@ -64,44 +63,45 @@ export function trendPanel(host, d) {
     const peak = pts.reduce((b, p) => (Math.abs(p.gap) > Math.abs(b.gap) ? p : b), pts[0]);
     if (Math.abs(peak.gap) >= thr && !(last.t - peak.t < 1.5 && Math.abs(peak.gap - last.gap) < 0.05)) {
       svg.append('circle').attr('cx', x(peak.t)).attr('cy', y(peak.gap)).attr('r', 3).attr('fill', tone(peak.gap));
-      svg.append('text').attr('class', 'lbl').attr('x', Math.max(m.l + 14, Math.min(W - m.r - 14, x(peak.t)))).attr('y', y(peak.gap) + (peak.gap > 0 ? -7 : 15)).attr('text-anchor', 'middle').style('fill', tone(peak.gap)).text(signed(peak.gap));
+      svg.append('text').attr('class', 'lbl').attr('x', Math.max(m.l + 14, Math.min(W - m.r - 14, x(peak.t)))).attr('y', y(peak.gap) + (peak.gap > 0 ? -7 : 15)).attr('text-anchor', 'middle').style('fill', tone(peak.gap)).text(show(peak.gap));
     }
     svg.append('g').selectAll('path').data(d.signals || []).join('path').attr('d', d3.symbol(d3.symbolTriangle, 60))
       .attr('transform', (s) => `translate(${x(s.minute)},${s.side === 'Over' ? H - m.b - 7 : m.t + 7}) rotate(${s.side === 'Over' ? 0 : 180})`).attr('fill', (s) => (s.side === 'Over' ? 'var(--fair)' : 'var(--book)'));
     svg.append('circle').attr('cx', x(last.t)).attr('cy', y(last.gap)).attr('r', 4.5).attr('fill', tone(last.gap)).attr('stroke', 'var(--panel)').attr('stroke-width', 1.5);
-    svg.append('text').attr('class', 'lbl').attr('x', W - m.r + 7).attr('y', y(last.gap)).attr('dy', '0.32em').style('fill', tone(last.gap)).text(signed(last.gap));
+    svg.append('text').attr('class', 'lbl').attr('x', W - m.r + 7).attr('y', y(last.gap)).attr('dy', '0.32em').style('fill', tone(last.gap)).text(show(last.gap));
   }
   host.replaceChildren(svg.node());
 }
 
-/** Every reading on the slate, fair minus book, in half-point bins. The tails beyond the threshold are the ones that matter. */
-export function histogram(host, gaps, { threshold = 2.5, span = 6 } = {}) {
+/** Every reading on the slate, fair minus book in deviations. The tails beyond the threshold are the ones that matter. */
+export function histogram(host, gaps, { threshold = 2, span = 4, bin = 0.25 } = {}) {
   const W = Math.max(260, host.clientWidth || 360), H = 232, m = { t: 52, r: 6, b: 44, l: 6 };
   const x = d3.scaleLinear([-span, span], [m.l, W - m.r]);
-  const bins = Array.from({ length: span * 4 }, (_, i) => ({ v0: -span + i * 0.5, n: 0 }));
-  for (const g of gaps) bins[Math.max(0, Math.min(bins.length - 1, Math.floor((g + span) / 0.5)))].n += 1;
+  const bins = Array.from({ length: Math.round((2 * span) / bin) }, (_, i) => ({ v0: -span + i * bin, n: 0 }));
+  for (const g of gaps) bins[Math.max(0, Math.min(bins.length - 1, Math.floor((g + span) / bin)))].n += 1;
   const y = d3.scaleLinear([0, d3.max(bins, (b) => b.n) || 1], [H - m.b, m.t]);
   const share = (test) => (gaps.length ? `${((100 * gaps.filter(test).length) / gaps.length).toFixed(1)}%` : '–');
   const high = share((g) => g <= -threshold), low = share((g) => g >= threshold);
   const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img')
-    .attr('aria-label', `Fair minus book across ${gaps.length} readings. The book was ${threshold} or more high on ${high} and ${threshold} or more low on ${low}.`);
-  const bw = x(0.5) - x(0);
+    .attr('aria-label', `Fair minus book in deviations across ${gaps.length} readings. The book was ${threshold} or more high on ${high} and ${threshold} or more low on ${low}.`);
+  const bw = x(bin) - x(0);
   svg.append('g').selectAll('rect').data(bins.filter((b) => b.n)).join('rect')
     .attr('x', (b) => x(b.v0) + 1).attr('width', Math.max(1, bw - 2)).attr('y', (b) => y(b.n)).attr('height', (b) => H - m.b - y(b.n))
-    .attr('fill', (b) => (b.v0 + 0.5 <= -threshold ? 'var(--book)' : b.v0 >= threshold ? 'var(--fair)' : 'var(--rule-strong)'));
+    .attr('fill', (b) => (b.v0 + bin <= -threshold ? 'var(--book)' : b.v0 >= threshold ? 'var(--fair)' : 'var(--rule-strong)'));
   svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', H - m.b).attr('y2', H - m.b).attr('stroke', 'var(--ink)');
   for (const v of [-threshold, threshold]) svg.append('line').attr('x1', x(v)).attr('x2', x(v)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--faint)').attr('stroke-dasharray', '3 4');
-  svg.append('g').selectAll('text').data([-5, -2.5, 0, 2.5, 5]).join('text').attr('x', x).attr('y', H - m.b + 17).attr('text-anchor', 'middle').text(tick);
-  svg.append('text').attr('x', W / 2).attr('y', H - 4).attr('text-anchor', 'middle').text('Fair minus book, points');
+  svg.append('g').selectAll('text').data([-2 * threshold, -threshold, 0, threshold, 2 * threshold]).join('text').attr('x', x).attr('y', H - m.b + 17).attr('text-anchor', 'middle').text(tick);
+  svg.append('text').attr('x', W / 2).attr('y', H - 4).attr('text-anchor', 'middle').text('Fair minus book, in deviations');
   svg.append('text').attr('class', 'big').attr('x', m.l).attr('y', 20).attr('fill', 'var(--book)').style('fill', 'var(--book)').text(high);
-  svg.append('text').attr('x', m.l).attr('y', 38).text(`book ${threshold}+ high`);
+  svg.append('text').attr('x', m.l).attr('y', 38).text(`book ${threshold}+ deviations high`);
   svg.append('text').attr('class', 'big').attr('x', W - m.r).attr('y', 20).attr('text-anchor', 'end').style('fill', 'var(--fair)').text(low);
-  svg.append('text').attr('x', W - m.r).attr('y', 38).attr('text-anchor', 'end').text(`book ${threshold}+ low`);
+  svg.append('text').attr('x', W - m.r).attr('y', 38).attr('text-anchor', 'end').text(`book ${threshold}+ deviations low`);
   host.replaceChildren(svg.node());
 }
 
 /**
  * Two panes on one time axis: the projected final (book, fair, pregame) above the score flow.
+ * The shaded band around fair is the signal distance: when the book's line leaves it, the gap is big enough to matter.
  * A crosshair runs through both and reports through onScrub; nothing floats over the chart.
  */
 export function gameChart(host, d) {
@@ -124,6 +124,7 @@ export function gameChart(host, d) {
   const clip = `clip-${Math.random().toString(36).slice(2, 8)}`;
   svg.append('clipPath').attr('id', clip).append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', topH);
   const top = svg.append('g').attr('clip-path', `url(#${clip})`);
+  if (d.fair.length && d.fair[0].band != null) top.append('path').attr('d', d3.area().x((p) => x(p.t)).y0((p) => y(p.v - p.band)).y1((p) => y(p.v + p.band))(d.fair)).attr('fill', 'var(--band)');
   top.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(d.pregame)).attr('y2', y(d.pregame)).attr('stroke', 'var(--faint)').attr('stroke-width', 1.5).attr('stroke-dasharray', '6 5');
   for (let i = 0; i + 1 < d.book.length; i += 1) { // the space between book and fair, tinted by which number is higher
     const a = d.book[i], b = d.book[i + 1];

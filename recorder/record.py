@@ -4,6 +4,7 @@ writes one track file per slate date, and keeps a ledger of model signals with t
 
   python recorder/record.py --out store --minutes 335          # live recorder (used by the GitHub Action)
   python recorder/record.py --out store --import-jsonl f.jsonl  # convert an older raw capture
+  python recorder/record.py --out store --rebuild               # re-judge every stored slate with the current rules
 
 Standard library only. ESPN's endpoints are unofficial and can change without notice.
 """
@@ -12,9 +13,11 @@ from concurrent.futures import ThreadPoolExecutor
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SB = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=%s&groups=50&limit=400&_=%d"
 OD = "https://sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball/events/%s/competitions/%s/odds?limit=20&_=%d"
-BUY_P, MIN_EDGE, T0, T1, BLOW_LEAD, BLOW_SPREAD = 0.62, 2.5, 4, 34, 15, 20
+# Thresholds are in deviations: (fair minus book) / (yardstick x the model's rest-of-game standard deviation at that minute).
+BUY_DEV, MARGIN, T0, T1, BLOW_LEAD, BLOW_SPREAD = 2.0, 0.05, 4, 34, 15, 20
+M0, M1, MIN_YARD_READINGS, LADDER = 4, 36, 300, (1.0, 1.5, 2.0, 2.5, 3.0)
 MODEL = json.load(open(os.path.join(ROOT, 'model.json')))
-ROWS = {r['minute']: r for r in MODEL['rows']}; CDF = MODEL['cdf']
+ROWS = {r['minute']: r for r in MODEL['rows']}; CDF = MODEL['cdf']; YARD = {k: MODEL['yardstick'][k] for k in ('total', 'team')}
 
 def get(u):
     with urllib.request.urlopen(urllib.request.Request(u, headers={'User-Agent': 'Mozilla/5.0'}), timeout=15) as r:
@@ -41,6 +44,35 @@ def cdf(z):
     if z >= zs[-1]: return CDF[-1][1]
     i = bisect.bisect_right(zs, z); a, b = CDF[i - 1], CDF[i]
     return a[1] + (b[1] - a[1]) * (z - a[0]) / (b[0] - a[0])
+def break_even(price):
+    """The win rate an American price needs to break even: -110 needs 52.4%."""
+    return -price / (-price + 100) if price < 0 else 100 / (price + 100)
+def units(price): return 100 / -price if price < 0 else price / 100
+def devs_of(g):
+    """For every reading with a line in the measuring window: the total, away and home gaps as shares of the model's
+    rest-of-game standard deviation, and the total gap in points."""
+    out = []
+    if not g.get('pre'): return out
+    for ts, t, a, h, bt, bs, op, up in g['r']:
+        if bt is None or bs is None or not (M0 <= t <= M1): continue
+        f = fair(g['pre'][0], g['pre'][1], t, a, h)
+        out.append(((f['fa'] + f['fh'] - bt) / f['sd_total'], (f['fa'] - (bt / 2 + bs / 2)) / f['sd_team'], (f['fh'] - (bt / 2 - bs / 2)) / f['sd_team'], f['fa'] + f['fh'] - bt))
+    return out
+def sd(xs):
+    m = sum(xs) / len(xs); return (sum((x - m) ** 2 for x in xs) / len(xs)) ** 0.5
+def yardstick(out, before):
+    """The usual size of the book-to-fair gap, from every slate recorded before `before` (so a slate is never judged
+    with its own data). Falls back to the value shipped in model.json until enough readings exist."""
+    tot, team, slates = [], [], []
+    tdir = os.path.join(out, 'tracks')
+    for name in sorted(os.listdir(tdir)) if os.path.isdir(tdir) else []:
+        if not name.endswith('.json') or name[:-5] >= before: continue
+        try: games = json.load(open(os.path.join(tdir, name)))['games']
+        except Exception: continue
+        rows = [d for g in games for d in devs_of(g)]
+        if rows: slates.append(name[:-5]); tot += [d[0] for d in rows]; team += [d[1] for d in rows] + [d[2] for d in rows]
+    if len(tot) < MIN_YARD_READINGS: return dict(YARD, source='model.json')
+    return dict(total=round(sd(tot), 4), team=round(sd(team), 4), readings=len(tot), slates=len(slates), through=slates[-1], source='recorded')
 def elapsed(period, clock):
     try:
         mm, ss = str(clock).split(':'); left = int(mm) + float(ss) / 60
@@ -52,8 +84,10 @@ def slate_date(now=None):
     now = now or datetime.datetime.now(datetime.timezone.utc)
     return (now - datetime.timedelta(hours=10)).strftime('%Y%m%d')
 
-def signals_for(g):
-    """First reading per market and side that clears the thresholds on two readings in a row. Team totals are implied from the live total and spread."""
+def signals_for(g, yard=None, k=BUY_DEV):
+    """First reading per market and side that sits k deviations from fair on two readings in a row, at a price the chance clears.
+    Team totals are implied from the live total and spread."""
+    yard = yard or YARD
     if not g.get('pre'): return []
     tot, hsp = g['pre']; out = []; fired = set(); fin = g.get('final'); prev_ok = set()
     if abs(hsp) >= BLOW_SPREAD: return []
@@ -65,28 +99,30 @@ def signals_for(g):
               ('away', g['away'] + ' team total', f['fa'], bt / 2 + bs / 2, f['sd_team'], f['ashort'] >= 3, None, None, None if not fin else fin[0]),
               ('home', g['home'] + ' team total', f['fh'], bt / 2 - bs / 2, f['sd_team'], f['hshort'] >= 3, None, None, None if not fin else fin[1])]
         for key, market, fv, line, sd, cold, o_price, u_price, final in mk:
-            p_over = 1 - cdf((line - fv) / sd)
+            p_over = 1 - cdf((line - fv) / sd); sigma = (yard['total'] if key == 'total' else yard['team']) * sd; dev = (fv - line) / sigma
             for side, p, price in (('Over', p_over, o_price), ('Under', 1 - p_over, u_price)):
-                if p >= BUY_P and abs(fv - line) >= MIN_EDGE: now_ok.add((key, side))
+                paid = price if price is not None else -115
+                if (dev >= k if side == 'Over' else dev <= -k) and p >= break_even(paid) + MARGIN: now_ok.add((key, side))
                 if (key, side) in now_ok and (key, side) in prev_ok and (key, side) not in fired:   # must hold on two readings in a row
                     fired.add((key, side))
                     res = 'Pending' if final is None else 'Push' if final == line else 'Won' if (final > line) == (side == 'Over') else 'Lost'
                     out.append(dict(id=f"{g['id']}|{key}|{side}", date=g['date'], game=g['id'], matchup=f"{g['away']} at {g['home']}", mkt=key, market=market, side=side,
                                     spot='Cold spot' if (cold and side == 'Over') else 'Book below fair' if side == 'Over' else 'Book above fair',
-                                    ts=ts, t=round(t, 1), score=f'{a}-{h}', line=line, price=price if price is not None else -115, priced='DraftKings' if price is not None else 'Assumed',
-                                    fair=round(fv, 1), edge=round(fv - line, 1), chance=round(100 * p), final=final, result=res))
+                                    ts=ts, t=round(t, 1), score=f'{a}-{h}', line=line, price=paid, priced='DraftKings' if price is not None else 'Assumed',
+                                    fair=round(fv, 1), edge=round(fv - line, 1), dev=round(dev, 2), sigma=round(sigma, 2), chance=round(100 * p), final=final, result=res))
         prev_ok = now_ok
     return out
 
 class Store:
     def __init__(self, out):
-        self.out = out; os.makedirs(os.path.join(out, 'tracks'), exist_ok=True); self.days = {}
+        self.out = out; os.makedirs(os.path.join(out, 'tracks'), exist_ok=True); self.days = {}; self.yards = {}
     def path(self, date): return os.path.join(self.out, 'tracks', date + '.json')
     def day(self, date):
         if date not in self.days:
             try: d = json.load(open(self.path(date)))
             except Exception: d = {'date': date, 'games': []}
             self.days[date] = {g['id']: g for g in d['games']}
+            if d.get('yardstick'): self.yards[date] = d['yardstick']
         return self.days[date]
     def add(self, date, ev_id, away, home, ar, hr, pre, status, final, reading):
         g = self.day(date).setdefault(ev_id, dict(id=ev_id, date=date, away=away, home=home, ar=ar, hr=hr, pre=None, status='', final=None, r=[]))
@@ -98,26 +134,30 @@ class Store:
             if last is not None and ((reading[1] - last[1]) * 60 > (reading[0] - last[0]) + 15 or reading[1] < last[1] - 0.05): return   # game clock cannot outrun the wall clock: ESPN glitch
             if last is None or (reading[1:] != last[1:] and reading[0] - last[0] >= 45) or reading[0] - last[0] >= 300: g['r'].append(reading)
     def save(self):
-        ledger_path = os.path.join(self.out, 'ledger.json'); index_path = os.path.join(self.out, 'index.json')
+        ledger_path = os.path.join(self.out, 'ledger.json'); index_path = os.path.join(self.out, 'index.json'); ladder_path = os.path.join(self.out, 'ladder.json')
         try: ledger = json.load(open(ledger_path))
         except Exception: ledger = []
         try: index = {d['date']: d for d in json.load(open(index_path))}
         except Exception: index = {}
+        try: ladder = json.load(open(ladder_path))
+        except Exception: ladder = []
         for date, games in self.days.items():
             gl = sorted(games.values(), key=lambda g: g['id'])
-            json.dump({'date': date, 'updated': int(time.time()), 'games': gl}, open(self.path(date), 'w'), separators=(',', ':'))
-            sig = [s for g in gl for s in signals_for(g)]
-            ledger = [s for s in ledger if s['date'] != date] + sig
-            gaps = []
-            for g in gl:
-                if not g.get('pre'): continue
-                for ts, t, a, h, bt, bs, op, up in g['r']:
-                    if bt is not None and 4 <= t <= 36:
-                        f = fair(g['pre'][0], g['pre'][1], t, a, h); gaps.append(f['fa'] + f['fh'] - bt)
-            n = len(gaps)
-            index[date] = dict(date=date, games=sum(1 for g in gl if g['r']), readings=sum(len(g['r']) for g in gl), gap_abs=round(sum(map(abs, gaps)) / n, 2) if n else None,
-                               gap_mean=round(sum(gaps) / n, 2) if n else None, below=round(100 * sum(x >= 2.5 for x in gaps) / n, 1) if n else None,
-                               above=round(100 * sum(x <= -2.5 for x in gaps) / n, 1) if n else None, total_readings=n)
+            if date not in self.yards: self.yards[date] = yardstick(self.out, date)   # fixed the first time a slate is saved
+            yard = self.yards[date]
+            json.dump({'date': date, 'updated': int(time.time()), 'yardstick': yard, 'games': gl}, open(self.path(date), 'w'), separators=(',', ':'))
+            ledger = [s for s in ledger if s['date'] != date] + [s for g in gl for s in signals_for(g, yard)]
+            ladder = [r for r in ladder if r['date'] != date]
+            for k in LADDER:   # what each threshold would have done, so the choice of threshold can be judged on results
+                sig = [s for g in gl for s in signals_for(g, yard, k)]; res = [s['result'] for s in sig]
+                ladder.append(dict(date=date, k=k, n=len(sig), won=res.count('Won'), lost=res.count('Lost'), push=res.count('Push'), open=res.count('Pending'),
+                                   units=round(sum(units(s['price']) if s['result'] == 'Won' else -1 if s['result'] == 'Lost' else 0 for s in sig), 2)))
+            rows = [d for g in gl for d in devs_of(g)]; n = len(rows)
+            index[date] = dict(date=date, games=sum(1 for g in gl if g['r']), readings=sum(len(g['r']) for g in gl), total_readings=n,
+                               gap_abs=round(sum(abs(d[3]) for d in rows) / n, 2) if n else None, gap_mean=round(sum(d[3] for d in rows) / n, 2) if n else None,
+                               dev_low=round(100 * sum(d[0] / yard['total'] >= BUY_DEV for d in rows) / n, 1) if n else None,
+                               dev_high=round(100 * sum(d[0] / yard['total'] <= -BUY_DEV for d in rows) / n, 1) if n else None, yard_total=yard['total'])
+        json.dump(sorted(ladder, key=lambda r: (r['date'], r['k'])), open(ladder_path, 'w'), separators=(',', ':'))
         json.dump(sorted(ledger, key=lambda s: (s['date'], s['ts'])), open(ledger_path, 'w'), separators=(',', ':'))
         json.dump(sorted(index.values(), key=lambda d: d['date']), open(index_path, 'w'), separators=(',', ':'))
 
@@ -165,8 +205,12 @@ def push(out):
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--out', default='store'); ap.add_argument('--minutes', type=float, default=335)
-    ap.add_argument('--push', action='store_true'); ap.add_argument('--import-jsonl')
+    ap.add_argument('--push', action='store_true'); ap.add_argument('--import-jsonl'); ap.add_argument('--rebuild', action='store_true')
     a = ap.parse_args(); store = Store(a.out)
+    if a.rebuild:   # recompute the ledger, ladder and summaries of every stored slate with the current rules
+        for name in sorted(os.listdir(os.path.join(a.out, 'tracks'))):
+            if name.endswith('.json'): store.day(name[:-5])
+        store.save(); return
     if a.import_jsonl:
         for line in open(a.import_jsonl):
             s = json.loads(line); date = slate_date(datetime.datetime.fromtimestamp(s['ts'], datetime.timezone.utc))
