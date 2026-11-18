@@ -14,13 +14,19 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SB = "https://site.api.espn.com/apis/site/v2/sports/basketball/mens-college-basketball/scoreboard?dates=%s&groups=50&limit=400&_=%d"
 OD = "https://sports.core.api.espn.com/v2/sports/basketball/leagues/mens-college-basketball/events/%s/competitions/%s/odds?limit=20&_=%d"
 # Thresholds are in deviations: (fair minus book) / (yardstick x the model's rest-of-game standard deviation at that minute).
-# The signal: a reading BUY_DEV out when the reading before it (about a minute earlier) was already ARM_DEV out on the same side.
-BUY_DEV, ARM_DEV, MARGIN, T0, T1, BLOW_LEAD, BLOW_SPREAD = 2.0, 1.5, 0.05, 3, 37, 15, 20
-M0, M1, MIN_YARD_READINGS = 3, 37, 300
-# Every rule is run on every slate so the choice can be judged on results: (id, trigger, level the previous reading must hold; None = one reading is enough).
-VARIANTS = (('signal', BUY_DEV, ARM_DEV), ('2x2', 2.0, 2.0), ('1.5x2', 1.5, 1.5), ('1x2', 1.0, 1.0), ('2x1', 2.0, None), ('2.5x1', 2.5, None), ('3x1', 3.0, None))
-STAGES = (('all', 0, 41), ('3 to 20', 0, 20), ('20 to 34', 20, 34), ('34 to 37', 34, 41))
-RULES_VERSION = '2026-11-18.2'   # change this whenever a rule, window or variant changes: the recorder then re-judges every stored slate when it next starts
+# The signal: the three-minute rolling average of (fair minus book) is BUY_DEV deviations from zero, at a price the chance clears.
+# One deviation is the standard deviation of that average, in points, measured on completed slates (about 1.2 for a game total).
+# It does not shrink as the game runs out; what a point is worth does, and the chance test covers that.
+# Readings from minute A0 feed the average; signals fire between minutes T0 and T1.
+BUY_DEV, MARGIN, A0, T0, T1, BLOW_LEAD, BLOW_SPREAD = 2.0, 0.05, 2, 4, 38, 15, 20
+WINDOW, COVER, CARRY = 180, 150, 420   # seconds averaged; seconds of history needed before an average exists; how old the reading before the window may be
+M0, M1, MIN_YARD_READINGS = 4, 38, 300
+# Every rule is run on every slate so the choice can be judged on results:
+# (id, deviations, seconds averaged (0 = a single reading), deviations the previous reading must already show (None = not needed)).
+VARIANTS = (('signal', BUY_DEV, WINDOW, None), ('avg3-1.5', 1.5, WINDOW, None), ('avg3-2.5', 2.5, WINDOW, None), ('avg3-3', 3.0, WINDOW, None),
+            ('avg2-2', 2.0, 120, None), ('avg5-2', 2.0, 300, None), ('one-2', 2.0, 0, None), ('one-3', 3.0, 0, None), ('one-2-after-1.5', 2.0, 0, 1.5))
+STAGES = (('all', 0, 41), ('4 to 20', 0, 20), ('20 to 34', 20, 34), ('34 to 38', 34, 41))
+RULES_VERSION = '2026-11-18.3'   # change this whenever a rule, window or variant changes: the recorder then re-judges every stored slate when it next starts
 MODEL = json.load(open(os.path.join(ROOT, 'model.json')))
 ROWS = {r['minute']: r for r in MODEL['rows']}; CDF = MODEL['cdf']; YARD = {k: MODEL['yardstick'][k] for k in ('total', 'team')}
 
@@ -53,21 +59,35 @@ def break_even(price):
     """The win rate an American price needs to break even: -110 needs 52.4%."""
     return -price / (-price + 100) if price < 0 else 100 / (price + 100)
 def units(price): return 100 / -price if price < 0 else price / 100
-def devs_of(g):
-    """For every reading with a line in the measuring window: the total, away and home gaps as shares of the model's
-    rest-of-game standard deviation, and the total gap in points."""
-    out = []
-    if not g.get('pre'): return out
+def rolled(g, window=WINDOW):
+    """Every reading with a line from minute A0 on, with each market's gap (fair minus book) averaged over the last
+    `window` seconds: the readings inside the window plus the one just before it, carried forward. `avg` is None until
+    the line has been followed for long enough. window=0 gives the single reading. Markets are total, away, home."""
+    out = []; hist = []; tot, hsp = g['pre']; cover = max(0, window - 30)
     for ts, t, a, h, bt, bs, op, up in g['r']:
-        if bt is None or bs is None or not (M0 <= t <= M1): continue
-        f = fair(g['pre'][0], g['pre'][1], t, a, h)
-        out.append(((f['fa'] + f['fh'] - bt) / f['sd_total'], (f['fa'] - (bt / 2 + bs / 2)) / f['sd_team'], (f['fh'] - (bt / 2 - bs / 2)) / f['sd_team'], f['fa'] + f['fh'] - bt))
+        if bt is None or bs is None or t < A0: continue
+        f = fair(tot, hsp, t, a, h)
+        gaps = (f['fa'] + f['fh'] - bt, f['fa'] - (bt / 2 + bs / 2), f['fh'] - (bt / 2 - bs / 2))
+        hist.append((ts, gaps))
+        first = next(i for i, x in enumerate(hist) if ts - x[0] <= window)
+        carried = window > 0 and first > 0 and (ts - window) - hist[first - 1][0] <= CARRY
+        use = hist[first - 1 if carried else first:]
+        hist = hist[max(0, first - 1):]
+        ready = window == 0 or carried or ts - use[0][0] >= cover
+        avg = tuple(sum(x[1][i] for x in use) / len(use) for i in range(3)) if ready else None
+        out.append(dict(ts=ts, t=t, a=a, h=h, bt=bt, bs=bs, op=op, up=up, f=f, gaps=gaps, avg=avg))
     return out
+def devs_of(g):
+    """For every reading in the measuring window that has a three-minute average: the averaged total, away and home gaps
+    in points, and the single-reading total gap."""
+    if not g.get('pre'): return []
+    return [(r['avg'][0], r['avg'][1], r['avg'][2], r['gaps'][0])
+            for r in rolled(g) if r['avg'] is not None and M0 <= r['t'] <= M1]
 def sd(xs):
     m = sum(xs) / len(xs); return (sum((x - m) ** 2 for x in xs) / len(xs)) ** 0.5
 def yardstick(out, before):
-    """The usual size of the book-to-fair gap, from every slate recorded before `before` (so a slate is never judged
-    with its own data). Falls back to the value shipped in model.json until enough readings exist."""
+    """One deviation: the standard deviation, in points, of the three-minute average gap, from every slate recorded
+    before `before` (so a slate is never judged with its own data). Falls back to model.json until enough readings exist."""
     tot, team, slates = [], [], []
     tdir = os.path.join(out, 'tracks')
     for name in sorted(os.listdir(tdir)) if os.path.isdir(tdir) else []:
@@ -76,8 +96,8 @@ def yardstick(out, before):
         except Exception: continue
         rows = [d for g in games for d in devs_of(g)]
         if rows: slates.append(name[:-5]); tot += [d[0] for d in rows]; team += [d[1] for d in rows] + [d[2] for d in rows]
-    if len(tot) < MIN_YARD_READINGS: return dict(YARD, source='model.json')
-    return dict(total=round(sd(tot), 4), team=round(sd(team), 4), readings=len(tot), slates=len(slates), through=slates[-1], source='recorded')
+    if len(tot) < MIN_YARD_READINGS: return dict(YARD, unit='points', source='model.json')
+    return dict(total=round(sd(tot), 3), team=round(sd(team), 3), unit='points', readings=len(tot), slates=len(slates), through=slates[-1], source='recorded')
 def elapsed(period, clock):
     try:
         mm, ss = str(clock).split(':'); left = int(mm) + float(ss) / 60
@@ -89,35 +109,34 @@ def slate_date(now=None):
     now = now or datetime.datetime.now(datetime.timezone.utc)
     return (now - datetime.timedelta(hours=10)).strftime('%Y%m%d')
 
-def signals_for(g, yard=None, k=BUY_DEV, arm=ARM_DEV):
-    """First reading per market and side that sits k deviations from fair, at a price the chance clears, when the reading
-    before it was at least `arm` deviations out on the same side (arm=None: no earlier reading needed).
+def signals_for(g, yard=None, k=BUY_DEV, window=WINDOW, arm=None):
+    """First reading per market and side whose averaged gap sits k deviations from zero, at a price the chance clears.
+    arm: if given, the reading before it must already have been that many deviations out on the same side.
     Team totals are implied from the live total and spread."""
     yard = yard or YARD
     if not g.get('pre'): return []
     tot, hsp = g['pre']; out = []; fired = set(); fin = g.get('final'); prev_ok = {}
     if abs(hsp) >= BLOW_SPREAD: return []
-    for ts, t, a, h, bt, bs, op, up in g['r']:
-        if bt is None or bs is None or not (T0 <= t <= T1) or abs(a - h) >= BLOW_LEAD: prev_ok = {}; continue
+    for r in rolled(g, window):
+        t, a, h, f, bt, bs = r['t'], r['a'], r['h'], r['f'], r['bt'], r['bs']
+        if r['avg'] is None or not (T0 <= t <= T1) or abs(a - h) >= BLOW_LEAD: prev_ok = {}; continue
         now_ok = {}
-        f = fair(tot, hsp, t, a, h); ft = f['fa'] + f['fh']
-        mk = [('total', 'Game total', ft, bt, f['sd_total'], (f['ashort'] + f['hshort']) >= 5, op, up, None if not fin else fin[0] + fin[1]),
-              ('away', g['away'] + ' team total', f['fa'], bt / 2 + bs / 2, f['sd_team'], f['ashort'] >= 3, None, None, None if not fin else fin[0]),
-              ('home', g['home'] + ' team total', f['fh'], bt / 2 - bs / 2, f['sd_team'], f['hshort'] >= 3, None, None, None if not fin else fin[1])]
-        for key, market, fv, line, sd, cold, o_price, u_price, final in mk:
-            p_over = 1 - cdf((line - fv) / sd); sigma = (yard['total'] if key == 'total' else yard['team']) * sd; dev = (fv - line) / sigma
-            for side, p, price in (('Over', p_over, o_price), ('Under', 1 - p_over, u_price)):
-                paid = price if price is not None else -115
-                size = dev if side == 'Over' else -dev
-                if size <= 0 or p < break_even(paid) + MARGIN: continue
-                now_ok[(key, side)] = size
-                if size >= k and (arm is None or prev_ok.get((key, side), 0) >= arm) and (key, side) not in fired:
-                    fired.add((key, side))
-                    res = 'Pending' if final is None else 'Push' if final == line else 'Won' if (final > line) == (side == 'Over') else 'Lost'
-                    out.append(dict(id=f"{g['id']}|{key}|{side}", date=g['date'], game=g['id'], matchup=f"{g['away']} at {g['home']}", mkt=key, market=market, side=side,
-                                    spot='Cold spot' if (cold and side == 'Over') else 'Book below fair' if side == 'Over' else 'Book above fair',
-                                    ts=ts, t=round(t, 1), score=f'{a}-{h}', line=line, price=paid, priced='DraftKings' if price is not None else 'Assumed',
-                                    fair=round(fv, 1), edge=round(fv - line, 1), dev=round(dev, 2), sigma=round(sigma, 2), chance=round(100 * p), final=final, result=res))
+        mk = [('total', 'Game total', f['fa'] + f['fh'], bt, f['sd_total'], yard['total'], (f['ashort'] + f['hshort']) >= 5, r['op'], r['up'], None if not fin else fin[0] + fin[1]),
+              ('away', g['away'] + ' team total', f['fa'], bt / 2 + bs / 2, f['sd_team'], yard['team'], f['ashort'] >= 3, None, None, None if not fin else fin[0]),
+              ('home', g['home'] + ' team total', f['fh'], bt / 2 - bs / 2, f['sd_team'], yard['team'], f['hshort'] >= 3, None, None, None if not fin else fin[1])]
+        for i, (key, market, fv, line, sd_rest, y, cold, o_price, u_price, final) in enumerate(mk):
+            gap = r['avg'][i]; sigma = y; dev = gap / sigma; p_over = 1 - cdf(-gap / sd_rest)
+            side, p, price = ('Over', p_over, o_price) if gap >= 0 else ('Under', 1 - p_over, u_price)
+            paid = price if price is not None else -115; size = abs(dev)
+            if size <= 0 or p < break_even(paid) + MARGIN: continue
+            now_ok[(key, side)] = size
+            if size >= k and (arm is None or prev_ok.get((key, side), 0) >= arm) and (key, side) not in fired:
+                fired.add((key, side))
+                res = 'Pending' if final is None else 'Push' if final == line else 'Won' if (final > line) == (side == 'Over') else 'Lost'
+                out.append(dict(id=f"{g['id']}|{key}|{side}", date=g['date'], game=g['id'], matchup=f"{g['away']} at {g['home']}", mkt=key, market=market, side=side,
+                                spot='Cold spot' if (cold and side == 'Over') else 'Book below fair' if side == 'Over' else 'Book above fair',
+                                ts=r['ts'], t=round(t, 1), score=f'{a}-{h}', line=line, price=paid, priced='DraftKings' if price is not None else 'Assumed',
+                                fair=round(fv, 1), edge=round(gap, 1), dev=round(dev, 2), sigma=round(sigma, 2), chance=round(100 * p), final=final, result=res))
         prev_ok = now_ok
     return out
 
@@ -151,13 +170,13 @@ class Store:
         except Exception: ladder = []
         for date, games in self.days.items():
             gl = sorted(games.values(), key=lambda g: g['id'])
-            if date not in self.yards: self.yards[date] = yardstick(self.out, date)   # fixed the first time a slate is saved
+            if (self.yards.get(date) or {}).get('unit') != 'points': self.yards[date] = yardstick(self.out, date)   # fixed the first time a slate is saved
             yard = self.yards[date]
             json.dump({'date': date, 'updated': int(time.time()), 'yardstick': yard, 'games': gl}, open(self.path(date), 'w'), separators=(',', ':'))
             ledger = [s for s in ledger if s['date'] != date] + [s for g in gl for s in signals_for(g, yard)]
             ladder = [r for r in ladder if r['date'] != date]
-            for rule, k, arm in VARIANTS:   # what each rule would have done, overall and by stage of the game
-                every = [s for g in gl for s in signals_for(g, yard, k, arm)]
+            for rule, k, window, arm in VARIANTS:   # what each rule would have done, overall and by stage of the game
+                every = [s for g in gl for s in signals_for(g, yard, k, window, arm)]
                 for stage, lo, hi in STAGES:
                     sig = [s for s in every if lo <= s['t'] < hi]; res = [s['result'] for s in sig]
                     ladder.append(dict(date=date, rule=rule, stage=stage, n=len(sig), won=res.count('Won'), lost=res.count('Lost'), push=res.count('Push'), open=res.count('Pending'),
@@ -186,7 +205,7 @@ def migrate(out):
         try: os.remove(os.path.join(out, stale))
         except OSError: pass
     store.save()
-    json.dump({'version': RULES_VERSION, 'signal': {'deviations': BUY_DEV, 'armed_at': ARM_DEV, 'margin': MARGIN, 'minutes': [T0, T1]}}, open(path, 'w'))
+    json.dump({'version': RULES_VERSION, 'signal': {'deviations': BUY_DEV, 'average_seconds': WINDOW, 'margin': MARGIN, 'minutes': [T0, T1]}}, open(path, 'w'))
     return True
 
 def odds_for(ev_id):

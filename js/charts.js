@@ -33,8 +33,8 @@ export function rangePlot({ gap, lo, hi, signal = false, span = 4, threshold = 2
 
 /**
  * A small multiple: fair minus book by game minute, in deviations, on the same scale in every panel.
- * The thin line is every reading and the bold line is its three-minute average.
- * The shaded band is "no trade". Where a reading leaves it, the space is filled: blue above (book low), orange below (book high).
+ * The thin line is every reading and the bold line is the three-minute rolling average the signal is judged on.
+ * The shaded band is "no trade". Where the average leaves it, the space is filled: blue above (book low), orange below (book high).
  */
 export function trendPanel(host, d) {
   const W = Math.max(220, host.clientWidth || 300), H = 172, m = { t: 8, r: 44, b: 20, l: 30 }, thr = d.threshold, span = d.span || 2 * thr, unit = d.unit || '';
@@ -42,7 +42,7 @@ export function trendPanel(host, d) {
   const x = d3.scaleLinear([0, 40], [m.l, W - m.r]), y = d3.scaleLinear([-span, span], [H - m.b, m.t]).clamp(true);
   const pts = d.series, last = pts[pts.length - 1] || null;
   const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img')
-    .attr('aria-label', last ? `${d.label}: fair minus book by game minute, latest ${show(last.gap)}` : `${d.label}: no line recorded`);
+    .attr('aria-label', last ? `${d.label}: fair minus book by game minute, in deviations` : `${d.label}: no line recorded`);
   // plot paper: a line every point and every five minutes
   svg.append('g').selectAll('line').data(d3.range(-span, span + 1)).join('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y).attr('y2', y).attr('stroke', 'var(--rule-soft)');
   svg.append('g').selectAll('line').data(d3.range(0, 41, 5)).join('line').attr('x1', x).attr('x2', x).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--rule-soft)');
@@ -52,23 +52,26 @@ export function trendPanel(host, d) {
   svg.append('g').selectAll('text').data([[thr, tick(thr)], [0, '0'], [-thr, tick(-thr)]]).join('text').attr('x', m.l - 6).attr('y', (v) => y(v[0])).attr('dy', '0.32em').attr('text-anchor', 'end').text((v) => v[1]);
   svg.append('g').selectAll('text').data([[0, 'Tip', 'start'], [20, 'Half', 'middle'], [40, 'Final', 'end']]).join('text').attr('x', (v) => x(v[0])).attr('y', H - 5).attr('text-anchor', (v) => v[2]).text((v) => v[1]);
   if (pts.length) {
-    const joined = (p, i) => i === 0 || p.t - pts[i - 1].t <= 3; // a break in the line where the recording has a hole
-    svg.append('path').attr('d', d3.area().defined(joined).x((p) => x(p.t)).y0(y(thr)).y1((p) => y(Math.max(p.gap, thr)))(pts)).attr('fill', 'var(--fair)').attr('opacity', 0.5);
-    svg.append('path').attr('d', d3.area().defined(joined).x((p) => x(p.t)).y0(y(-thr)).y1((p) => y(Math.min(p.gap, -thr)))(pts)).attr('fill', 'var(--book)').attr('opacity', 0.5);
-    // every reading as a thin line, and its three-minute average as the trend
-    svg.append('path').attr('d', d3.line().defined(joined).x((p) => x(p.t)).y((p) => y(p.gap))(pts)).attr('fill', 'none').attr('stroke', 'var(--rule-strong)').attr('stroke-width', 1).attr('stroke-linejoin', 'round');
-    const trend = pts.map((p) => { const near = pts.filter((q) => Math.abs(q.t - p.t) <= 1.5); return { t: p.t, gap: d3.mean(near, (q) => q.gap) }; });
-    svg.append('path').attr('d', d3.line().defined(joined).x((p) => x(p.t)).y((p) => y(p.gap))(trend)).attr('fill', 'none').attr('stroke', 'var(--ink)').attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round');
-    const tone = (g) => (g >= thr ? 'var(--fair)' : g <= -thr ? 'var(--book)' : 'var(--ink)');
-    const peak = pts.reduce((b, p) => (Math.abs(p.gap) > Math.abs(b.gap) ? p : b), pts[0]);
-    if (Math.abs(peak.gap) >= thr && !(last.t - peak.t < 1.5 && Math.abs(peak.gap - last.gap) < 0.05)) {
-      svg.append('circle').attr('cx', x(peak.t)).attr('cy', y(peak.gap)).attr('r', 3).attr('fill', tone(peak.gap));
-      svg.append('text').attr('class', 'lbl').attr('x', Math.max(m.l + 14, Math.min(W - m.r - 14, x(peak.t)))).attr('y', y(peak.gap) + (peak.gap > 0 ? -7 : 15)).attr('text-anchor', 'middle').style('fill', tone(peak.gap)).text(show(peak.gap));
+    // thin line: every reading. Bold line: the rolling average the signal is judged on (falls back to a local mean if none is supplied).
+    const hasAvg = pts.some((p) => p.avg != null);
+    const bold = hasAvg ? pts.filter((p) => p.avg != null).map((p) => ({ t: p.t, gap: p.avg })) : pts.map((p) => ({ t: p.t, gap: d3.mean(pts.filter((q) => Math.abs(q.t - p.t) <= 1.5), (q) => q.gap) }));
+    const joined = (rows) => (p, i) => i === 0 || p.t - rows[i - 1].t <= 3; // a break in the line where the recording has a hole
+    svg.append('path').attr('d', d3.line().defined(joined(pts)).x((p) => x(p.t)).y((p) => y(p.gap))(pts)).attr('fill', 'none').attr('stroke', 'var(--rule-strong)').attr('stroke-width', 1).attr('stroke-linejoin', 'round');
+    if (bold.length) {
+      svg.append('path').attr('d', d3.area().defined(joined(bold)).x((p) => x(p.t)).y0(y(thr)).y1((p) => y(Math.max(p.gap, thr)))(bold)).attr('fill', 'var(--fair)').attr('opacity', 0.5);
+      svg.append('path').attr('d', d3.area().defined(joined(bold)).x((p) => x(p.t)).y0(y(-thr)).y1((p) => y(Math.min(p.gap, -thr)))(bold)).attr('fill', 'var(--book)').attr('opacity', 0.5);
+      svg.append('path').attr('d', d3.line().defined(joined(bold)).x((p) => x(p.t)).y((p) => y(p.gap))(bold)).attr('fill', 'none').attr('stroke', 'var(--ink)').attr('stroke-width', 2).attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round');
+      const tone = (g) => (g >= thr ? 'var(--fair)' : g <= -thr ? 'var(--book)' : 'var(--ink)');
+      const end = bold[bold.length - 1], peak = bold.reduce((b, p) => (Math.abs(p.gap) > Math.abs(b.gap) ? p : b), bold[0]);
+      if (Math.abs(peak.gap) >= thr && !(end.t - peak.t < 1.5 && Math.abs(peak.gap - end.gap) < 0.05)) {
+        svg.append('circle').attr('cx', x(peak.t)).attr('cy', y(peak.gap)).attr('r', 3).attr('fill', tone(peak.gap));
+        svg.append('text').attr('class', 'lbl').attr('x', Math.max(m.l + 14, Math.min(W - m.r - 14, x(peak.t)))).attr('y', y(peak.gap) + (peak.gap > 0 ? -7 : 15)).attr('text-anchor', 'middle').style('fill', tone(peak.gap)).text(show(peak.gap));
+      }
+      svg.append('g').selectAll('path').data(d.signals || []).join('path').attr('d', d3.symbol(d3.symbolTriangle, 60))
+        .attr('transform', (s) => `translate(${x(s.minute)},${s.side === 'Over' ? H - m.b - 7 : m.t + 7}) rotate(${s.side === 'Over' ? 0 : 180})`).attr('fill', (s) => (s.side === 'Over' ? 'var(--fair)' : 'var(--book)'));
+      svg.append('circle').attr('cx', x(end.t)).attr('cy', y(end.gap)).attr('r', 4.5).attr('fill', tone(end.gap)).attr('stroke', 'var(--panel)').attr('stroke-width', 1.5);
+      svg.append('text').attr('class', 'lbl').attr('x', W - m.r + 7).attr('y', y(end.gap)).attr('dy', '0.32em').style('fill', tone(end.gap)).text(show(end.gap));
     }
-    svg.append('g').selectAll('path').data(d.signals || []).join('path').attr('d', d3.symbol(d3.symbolTriangle, 60))
-      .attr('transform', (s) => `translate(${x(s.minute)},${s.side === 'Over' ? H - m.b - 7 : m.t + 7}) rotate(${s.side === 'Over' ? 0 : 180})`).attr('fill', (s) => (s.side === 'Over' ? 'var(--fair)' : 'var(--book)'));
-    svg.append('circle').attr('cx', x(last.t)).attr('cy', y(last.gap)).attr('r', 4.5).attr('fill', tone(last.gap)).attr('stroke', 'var(--panel)').attr('stroke-width', 1.5);
-    svg.append('text').attr('class', 'lbl').attr('x', W - m.r + 7).attr('y', y(last.gap)).attr('dy', '0.32em').style('fill', tone(last.gap)).text(show(last.gap));
   }
   host.replaceChildren(svg.node());
 }

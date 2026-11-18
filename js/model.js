@@ -2,20 +2,23 @@
 // The Python recorder (recorder/record.py) implements the same arithmetic; tests/fixtures/parity.json keeps the two honest.
 
 export const RULES = Object.freeze({
-  // Thresholds are in deviations: fair minus book, divided by the usual size of that gap for the time left.
-  // One deviation = yardstick x the model's rest-of-game standard deviation at that minute, so it is about
-  // 2.1 points at minute 8 and 1.3 at minute 32 for a game total. A fixed number of points is not used anywhere.
-  buyDev: 2, // deviations a reading needs to be a signal...
-  armDev: 1.5, // ...when the reading before it, about a minute earlier, was already this far out on the same side
-  leanDev: 1.5,
+  // The signal is judged on a rolling three-minute average of fair minus book, not on a single reading: ordinary scoring
+  // moves the fair number 2.3 points a minute, so a single reading is mostly timing.
+  // One deviation is the standard deviation of that average in points (about 1.2 for a game total), measured on
+  // completed slates. It does not shrink late in the game; what a point is worth does, and the chance test covers that.
+  buyDev: 2, // deviations the average needs for a signal
+  leanDev: 1.5, // the watch tier
   margin: 0.05, // and the chance must beat the price's break-even by this much
-  firstMinute: 3, // signals only between these elapsed minutes
-  lastMinute: 37,
+  windowSec: 180, // seconds averaged
+  carrySec: 420, // the reading just before the window is carried forward if it is no older than this
+  averageFrom: 2, // readings from this minute on feed the average
+  firstMinute: 4, // signals only between these elapsed minutes
+  lastMinute: 38,
   blowoutLead: 15, // no signals at or beyond this lead
   blowoutSpread: 20, // or this pregame spread
   staleMs: 100000, // a live line older than this is not acted on
-  measureFrom: 3, // the slate summary and the yardstick count readings between these minutes (the recorder uses the same window)
-  measureTo: 37,
+  measureFrom: 4, // the slate summary and the yardstick count readings between these minutes (the recorder uses the same window)
+  measureTo: 38,
 });
 
 /**
@@ -66,7 +69,7 @@ export function isClockGlitch(prev, next) {
 export function createModel(json) {
   const rows = new Map(json.rows.map((r) => [r.minute, r]));
   const dist = json.cdf;
-  const baseYard = json.yardstick; // { total, team }: the usual book-to-fair gap as a share of the rest-of-game standard deviation
+  const baseYard = json.yardstick; // { total, team }: one deviation of the averaged gap, in points
 
   function coef(t) {
     const tt = Math.min(38, Math.max(2, t));
@@ -128,15 +131,13 @@ export function createModel(json) {
 
   /**
    * One reading against the model. bookTotal and bookSpread are DraftKings' live total and home spread, or null.
-   * Returns, per market, the line, the fair number, the edge (fair minus line) in points and in deviations (`dev`),
-   * the points one deviation is worth right now (`sigma`), the chance of the over, and the signal the reading earns
-   * on its own: 'buy', 'lean' or null. A buy still needs the reading before it to have been armed (see signalsFor).
-   * `reach` is how far out the reading counts for arming: its deviations, or 0 when the price leaves no room.
-   * opts: { yard, buyDev, overPrice, underPrice }. Prices are American odds for the game total; -115 is assumed when absent.
+   * Returns, per market, the line, the fair number, the edge (fair minus line) in points, `sd` (the model's rest-of-game
+   * standard deviation), `sigma` (the points one deviation is worth), `dev` (this reading's edge in deviations) and
+   * the chance of the over. Signals are not decided here: they need the rolling average (see track).
+   * opts: { yard }.
    */
   function judge(pre, t, awayPts, homePts, bookTotal, bookSpread, opts = {}) {
     const yard = opts.yard || baseYard;
-    const buyDev = opts.buyDev == null ? RULES.buyDev : opts.buyDev;
     const f = fair(pre, t, awayPts, homePts);
     const hasBook = bookTotal != null && bookSpread != null;
     const lines = hasBook ? { total: bookTotal, away: bookTotal / 2 + bookSpread / 2, home: bookTotal / 2 - bookSpread / 2 } : null;
@@ -144,21 +145,15 @@ export function createModel(json) {
       && Math.abs(awayPts - homePts) < RULES.blowoutLead && Math.abs(pre[1]) < RULES.blowoutSpread;
     const markets = {};
     for (const k of ['total', 'away', 'home']) {
-      const m = { fair: f[k], line: null, edge: null, dev: null, sigma: (k === 'total' ? yard.total * f.sdTotal : yard.team * f.sdTeam), over: null, side: null, chance: null, price: null, signal: null };
+      const m = { fair: f[k], line: null, edge: null, dev: null, sd: k === 'total' ? f.sdTotal : f.sdTeam, sigma: k === 'total' ? yard.total : yard.team,
+        over: null, side: null, chance: null, price: null, quoted: false, avgEdge: null, avgDev: null, reach: 0, signal: null };
       if (lines) {
         m.line = lines[k];
         m.edge = m.fair - m.line;
-        m.over = 1 - cdf((m.line - m.fair) / (k === 'total' ? f.sdTotal : f.sdTeam));
+        m.dev = m.edge / m.sigma;
+        m.over = 1 - cdf((m.line - m.fair) / m.sd);
         m.side = m.edge >= 0 ? 'Over' : 'Under';
         m.chance = m.side === 'Over' ? m.over : 1 - m.over;
-        m.dev = m.edge / m.sigma;
-        const quoted = k === 'total' ? (m.side === 'Over' ? opts.overPrice : opts.underPrice) : null;
-        m.price = quoted == null ? -115 : quoted;
-        m.quoted = quoted != null;
-        const size = Math.abs(m.dev);
-        m.reach = eligible && m.chance >= breakEven(m.price) + RULES.margin ? size : 0;
-        if (m.reach >= buyDev) m.signal = 'buy';
-        else if (eligible && size >= RULES.leanDev) m.signal = 'lean';
       }
       markets[k] = m;
     }
@@ -166,22 +161,66 @@ export function createModel(json) {
   }
 
   /**
-   * Signals in a game's readings: the first reading per market and side that is buyDev out when the reading before it
-   * was at least armDev out on the same side. opts: { yard, buyDev, armDev }; armDev null means one reading is enough.
+   * A game's readings, each judged on the rolling average of its gap: the readings of the last `windowSec` seconds plus
+   * the one just before them, carried forward. Per market this adds avgEdge (points), avgDev (deviations), the side,
+   * chance and price that go with the average, `reach` (avgDev, or 0 when the game is not eligible or the price leaves
+   * no room) and the signal: 'buy' at buyDev, 'lean' at leanDev, else null. No average exists until the line has been
+   * followed for most of a window.
    * readings: [[unixSeconds, elapsedMinutes, awayPts, homePts, bookTotal, bookSpread, overPrice, underPrice], ...]
+   * opts: { yard, buyDev, windowSec }. windowSec 0 judges single readings.
+   */
+  function track(pre, readings, opts = {}) {
+    const windowSec = opts.windowSec == null ? RULES.windowSec : opts.windowSec;
+    const buyDev = opts.buyDev == null ? RULES.buyDev : opts.buyDev;
+    const cover = Math.max(0, windowSec - 30);
+    const keys = ['total', 'away', 'home'];
+    let hist = [];
+    const out = [];
+    for (const r of readings) {
+      if (r[4] == null || r[5] == null || r[1] < RULES.averageFrom) continue;
+      const j = judge(pre, r[1], r[2], r[3], r[4], r[5], opts);
+      hist.push({ ts: r[0], e: keys.map((k) => j.markets[k].edge) });
+      const first = hist.findIndex((x) => r[0] - x.ts <= windowSec);
+      const carried = windowSec > 0 && first > 0 && r[0] - windowSec - hist[first - 1].ts <= RULES.carrySec;
+      const use = hist.slice(carried ? first - 1 : first);
+      hist = hist.slice(Math.max(0, first - 1));
+      const ready = windowSec === 0 || carried || r[0] - use[0].ts >= cover;
+      keys.forEach((k, i) => {
+        const m = j.markets[k];
+        if (!ready) return;
+        m.avgEdge = use.reduce((sum, x) => sum + x.e[i], 0) / use.length;
+        m.avgDev = m.avgEdge / m.sigma;
+        m.side = m.avgEdge >= 0 ? 'Over' : 'Under';
+        m.over = 1 - cdf(-m.avgEdge / m.sd);
+        m.chance = m.side === 'Over' ? m.over : 1 - m.over;
+        const quoted = k === 'total' ? (m.side === 'Over' ? r[6] : r[7]) : null;
+        m.price = quoted == null ? -115 : quoted;
+        m.quoted = quoted != null;
+        const size = Math.abs(m.avgDev);
+        m.reach = j.eligible && size > 0 && m.chance >= breakEven(m.price) + RULES.margin ? size : 0;
+        if (m.reach >= buyDev) m.signal = 'buy';
+        else if (j.eligible && size >= RULES.leanDev) m.signal = 'lean';
+      });
+      out.push({ ts: r[0], t: r[1], away: r[2], home: r[3], ready, ...j });
+    }
+    return out;
+  }
+
+  /**
+   * Signals in a game's readings: the first reading per market and side whose rolling average is buyDev deviations out.
    * finals: {away, home} once the game is over, else null.
+   * opts: { yard, buyDev, windowSec, armDev }. armDev, when given, also requires the reading before it to have been
+   * that far out on the same side (only used by the single-reading comparison rules).
    */
   function signalsFor(pre, readings, finals, opts = {}) {
     const fired = new Set();
     const out = [];
-    const armDev = opts.armDev === undefined ? RULES.armDev : opts.armDev;
+    const armDev = opts.armDev == null ? null : opts.armDev;
     let prev = {};
-    for (const r of readings) {
-      if (r[4] == null || r[5] == null) { prev = {}; continue; }
-      const j = judge(pre, r[1], r[2], r[3], r[4], r[5], { ...opts, overPrice: r[6], underPrice: r[7] });
+    for (const row of track(pre, readings, opts)) {
       const cur = {};
       for (const k of ['total', 'away', 'home']) {
-        const m = j.markets[k];
+        const m = row.markets[k];
         if (!m.reach) continue;
         cur[k] = { side: m.side, reach: m.reach };
         const key = k + m.side;
@@ -190,8 +229,8 @@ export function createModel(json) {
         fired.add(key);
         const final = finals ? (k === 'total' ? finals.away + finals.home : finals[k]) : null;
         out.push({
-          market: k, side: m.side, at: r[0], minute: r[1], score: `${r[2]}-${r[3]}`,
-          line: m.line, fair: m.fair, edge: m.edge, dev: m.dev, sigma: m.sigma, chance: m.chance,
+          market: k, side: m.side, at: row.ts, minute: row.t, score: `${row.away}-${row.home}`,
+          line: m.line, fair: m.fair, edge: m.avgEdge, dev: m.avgDev, sigma: m.sigma, chance: m.chance,
           price: m.price, priced: m.quoted ? 'DraftKings' : 'assumed',
           final,
           result: final == null ? 'Pending' : final === m.line ? 'Push' : (final > m.line) === (m.side === 'Over') ? 'Won' : 'Lost',
@@ -202,5 +241,5 @@ export function createModel(json) {
     return out;
   }
 
-  return { coef, cdf, fair, judge, signalsFor, yardstick: baseYard, share: (t) => (t <= 0 ? 0 : t >= 40 ? 1 : coef(t).share) };
+  return { coef, cdf, fair, judge, track, signalsFor, yardstick: baseYard, share: (t) => (t <= 0 ? 0 : t >= 40 ? 1 : coef(t).share) };
 }

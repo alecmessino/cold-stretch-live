@@ -49,22 +49,18 @@ The chance of an over comes from how far real games landed from the estimate, no
 
 ## Signals
 
-Gaps are measured in **deviations**, not points. One deviation is the usual distance between the book and fair for the time left:
+Signals are judged on a **three-minute rolling average** of fair minus book, recalculated at every reading (about every 60 seconds), and measured in **deviations**.
 
-    deviation = yardstick x the model's rest-of-game standard deviation at that minute
+Why an average: across 16,086 games, ordinary scoring moves the fair number 2.3 points a minute at every stage of the game. A single reading's gap is mostly timing, the score updating before the line does. On the first recorded slate 76% of large single-reading gaps were gone a minute later, and it was fair that closed them, not the book. Averaging three minutes removes that at almost no cost in accuracy (a 14.2-point miss to the final against 14.1 at minute 10).
 
-- The rest-of-game standard deviation comes from the 16,086-game fit. It falls from about 15 points at minute 4 to 8 at minute 34, so a point of gap is worth more late than early. A fixed 2.5 points meant a 58% chance at minute 4 and 64% at minute 34.
-- The yardstick is how big the gap usually is as a share of that: 0.149 for game totals on the first recorded slate. The recorder re-estimates it from every completed slate and stores it with each day, so a slate is never judged with its own data.
-- For a game total, one deviation is about 2.2 points at minute 8, 1.8 at halftime and 1.3 at minute 32.
+Why deviations: one deviation is the standard deviation of that average, in points, measured on completed slates: 1.23 for game totals and 0.78 for implied team totals on the first slate. It is about the same number of points early and late. What a point is worth is not: the model's rest-of-game standard deviation falls from 15 points at minute 4 to 8 at minute 34, so the same gap is a bigger edge late. The chance test covers that.
 
-A signal is a reading **2 or more deviations from fair when the reading before it, about a minute earlier, was already 1.5 out on the same side**, at a price the model's chance still beats by five points over break-even. Only between minute 3 and minute 37, never at a 15-point lead, never on a 20-point pregame spread. Two deviations is about a 63% chance. Both sides are logged:
+A signal is the first time the average sits **2 or more deviations from zero, at a price the model's chance beats by five points over break-even**. Readings from minute 2 feed the average; signals fire between minute 4 and minute 38, never at a 15-point lead, never on a 20-point pregame spread. A watch tier starts at 1.5. Both sides are logged:
 
 - **Over**: the book is under fair. This is the cold-stretch case.
 - **Under**: the book is over fair, usually a hot pace carried too far.
 
-Readings are about a minute apart, so the rule asks a gap to last a minute, not several. That matters: on the first slate only 22% of readings 2 deviations out were still out a reading later, which is what a lagging feed looks like.
-
-The recorder runs seven rules on every slate (the signal; 2, 1.5 and 1 deviations twice in a row; 2, 2.5 and 3 deviations on a single reading) and splits each by stage of the game (`ladder.json`), so the rule can be chosen on outcomes.
+The recorder stores the yardstick with each day and re-estimates it from completed slates only, so a slate is never judged with its own data. It also runs nine rules on every slate (the three-minute average at 1.5, 2, 2.5 and 3 deviations; two- and five-minute averages at 2; single readings at 2, at 3, and at 2 after 1.5) and splits each by stage of the game (`ladder.json`), so the rule can be chosen on outcomes. When the rules change (`RULES_VERSION`), the recorder judges every stored slate again from its readings the next time it starts.
 
 Game totals are settled at DraftKings' live price. Team totals are implied from the live total and spread, (total ± spread) / 2, and priced at an estimated -115, because the feed carries no posted team-total market.
 

@@ -55,20 +55,52 @@ class Recording(unittest.TestCase):
         self.add(1120, 13.0, 23, 14, 141.5)
         self.assertEqual([r[1] for r in self.store.day('20261117')['g1']['r']], [12.5, 13.0])
 
-    def test_signal_needs_two_readings_and_settles(self):
-        fair = lambda t, a, h: sum(record.fair(150, 0, t, a, h)[k] for k in ('fa', 'fh'))
-        low = lambda t, a, h: round((fair(t, a, h) - 6) * 2) / 2
-        self.add(0, 10, 15, 15, round(fair(10, 15, 15) * 2) / 2)
-        self.add(60, 11, 17, 15, low(11, 17, 15))
-        g = self.store.day('20261117')['g1']
-        self.assertEqual([s for s in record.signals_for(g) if s['mkt'] == 'total'], [])
-        self.add(120, 12, 17, 17, low(12, 17, 17))
-        self.add(180, 13, 19, 17, low(13, 19, 17))
-        sig = [s for s in record.signals_for(g) if s['mkt'] == 'total']
+    def game(self, gaps, start=20, price=-110, a0=30, h0=32, pre=(150, 0), every=60, final=None):
+        """A game where the book sits gaps[i] points under fair at reading i."""
+        g = dict(id='g', date='20261117', away='Away U', home='Home St', pre=list(pre), final=final, r=[])
+        for i, gap in enumerate(gaps):
+            t = start + i * every / 60; a, h = a0 + i, h0 + i
+            f = record.fair(pre[0], pre[1], t, a, h)
+            g['r'].append([i * every, t, a, h, f['fa'] + f['fh'] - gap, a - h, price, price])
+        return g
+
+    def total(self, g, **kw):
+        return [s for s in record.signals_for(g, **kw) if s['mkt'] == 'total']
+
+    def test_the_signal_is_judged_on_a_three_minute_average(self):
+        rows = record.rolled(self.game([0, 0, 0, 6, 0, 0, 0]))
+        self.assertIsNone(rows[1]['avg'], 'no average until the line has been followed for most of three minutes')
+        self.assertAlmostEqual(rows[3]['avg'][0], 6 / 4)
+        self.assertAlmostEqual(rows[6]['avg'][0], 6 / 5, msg='the reading just before the window is carried forward')
+        self.assertEqual(self.total(self.game([0, 0, 0, 6, 0, 0, 0])), [], 'one six-point reading is not a signal')
+        self.assertEqual(len(self.total(self.game([0, 3, 3, 3, 3, 3]))), 1, 'three points that stay are')
+
+    def test_a_signal_fires_once_and_settles(self):
+        sig = self.total(self.game([0, 3, 3, 3, 3, 3, 3]))
         self.assertEqual(len(sig), 1)
-        self.assertEqual((sig[0]['side'], sig[0]['t'], sig[0]['result'], sig[0]['priced']), ('Over', 12, 'Pending', 'DraftKings'))
-        self.add(0, 0, 0, 0, None, final=[90, 90], status='Final')
-        self.assertEqual([s['result'] for s in record.signals_for(g) if s['mkt'] == 'total'], ['Won'])
+        self.assertEqual((sig[0]['side'], sig[0]['result'], sig[0]['priced']), ('Over', 'Pending', 'DraftKings'))
+        self.assertGreaterEqual(sig[0]['dev'], record.BUY_DEV)
+        self.assertEqual([s['result'] for s in self.total(self.game([0, 3, 3, 3, 3, 3, 3], final=[90, 90]))], ['Won'])
+        self.assertEqual([s['result'] for s in self.total(self.game([0, 3, 3, 3, 3, 3, 3], final=[50, 50]))], ['Lost'])
+        self.assertEqual(self.total(self.game([0, -3, -3, -3, -3, -3]))[0]['side'], 'Under')
+
+    def test_price_thresholds_windows_and_yardsticks(self):
+        held = [2.7] * 5
+        self.assertEqual(len(self.total(self.game(held))), 1)
+        self.assertEqual(self.total(self.game(held, price=-180)), [], 'a steep price cancels it')
+        self.assertEqual(self.total(self.game(held), k=3.0), [])
+        self.assertEqual(self.total(self.game(held), yard={'total': 2, 'team': 2}), [], 'a wider yardstick makes the same gap ordinary')
+        self.assertEqual([s['t'] for s in self.total(self.game([0, 0, 0, 6, 0]), window=0)], [23], 'the single-reading comparison rule')
+        self.assertEqual([s['t'] for s in self.total(self.game([0, 0, 2.5, 6, 0]), window=0, arm=1.5)], [23])
+        self.assertEqual(self.total(self.game([0, 0, 0, 6, 0]), window=0, arm=1.5), [])
+
+    def test_no_signals_in_blowouts_big_spreads_or_outside_the_window(self):
+        held = [4] * 6
+        self.assertEqual(len(self.total(self.game(held))), 1)
+        self.assertEqual(self.total(self.game(held, h0=30 + record.BLOW_LEAD)), [])
+        self.assertEqual(self.total(self.game(held, pre=(150, -record.BLOW_SPREAD))), [])
+        self.assertEqual(self.total(self.game(held, start=record.T1 + 0.5, every=20)), [])
+        self.assertTrue(all(s['t'] >= record.T0 for s in record.signals_for(self.game(held, start=0, a0=0, h0=0, every=30))))
 
     def test_save_writes_tracks_ledger_and_index(self):
         self.add(0, 10, 15, 15, 150.5)
@@ -82,37 +114,6 @@ class Recording(unittest.TestCase):
         ladder = json.load(open(os.path.join(self.dir.name, 'ladder.json')))
         self.assertEqual({r['rule'] for r in ladder}, {v[0] for v in record.VARIANTS})
         self.assertEqual(len(ladder), len(record.VARIANTS) * len(record.STAGES))
-
-    def test_threshold_is_in_deviations_and_price_aware(self):
-        fair = lambda t, a, h: sum(record.fair(150, 0, t, a, h)[k] for k in ('fa', 'fh'))
-        sigma = lambda t: record.YARD['total'] * record.coef(t)['sd_total']
-        for i, t in enumerate((20, 21, 22)):
-            self.store.add('20261117', 'g1', 'Away U', 'Home St', None, None, [150, 0], 'Live', None, [i * 60, t, 30 + i, 32 + i, round((fair(t, 30 + i, 32 + i) - 2.3 * sigma(t)) * 2) / 2, 0, -110, -110])
-        g = self.store.day('20261117')['g1']
-        total = lambda **kw: [s for s in record.signals_for(g, **kw) if s['mkt'] == 'total']
-        self.assertEqual(len(total()), 1)
-        self.assertGreaterEqual(total()[0]['dev'], 2)
-        self.assertEqual(total(k=3.0), [], 'not three deviations out')
-        self.assertEqual(total(yard={'total': 0.25, 'team': 0.25}), [], 'a wider yardstick makes the same gap ordinary')
-        for r in g['r']: r[6] = -170
-        self.assertEqual(total(), [], 'a steep price cancels it')
-
-    def test_a_signal_needs_the_reading_before_it_to_be_armed(self):
-        fair = lambda t, a, h: sum(record.fair(150, 0, t, a, h)[k] for k in ('fa', 'fh'))
-        sigma = lambda t: record.YARD['total'] * record.coef(t)['sd_total']
-        def game(devs):
-            g = dict(id='g', date='20261117', away='Away U', home='Home St', pre=[150, 0], final=None, r=[])
-            for i, d in enumerate(devs):
-                t = 20 + i; a, h = 30 + i, 32 + i
-                g['r'].append([i * 60, t, a, h, fair(t, a, h) - d * sigma(t), 0, -110, -110])
-            return g
-        total = lambda g, **kw: [s for s in record.signals_for(g, **kw) if s['mkt'] == 'total']
-        self.assertEqual(total(game([0, 2.3, 0])), [], 'one reading at 2.3 with nothing before it')
-        self.assertEqual([s['t'] for s in total(game([0, 1.6, 2.3]))], [22], '1.6 then 2.3 fires on the second')
-        self.assertEqual(total(game([0, 1.6, 1.9, 1.7])), [], 'armed but never reaches 2')
-        self.assertEqual(total(game([0, -1.8, 2.3])), [], 'armed on the other side does not count')
-        self.assertEqual([s['t'] for s in total(game([0, 2.3, 0]), arm=None)], [21], 'the one-reading variant')
-        self.assertEqual([s['t'] for s in total(game([0, 1.6, 1.7]), k=1.5, arm=1.5)], [22], 'the 1.5 twice variant')
 
     def test_stored_slates_are_judged_again_when_the_rules_change(self):
         self.add(0, 10, 15, 15, 150.5)
@@ -135,8 +136,9 @@ class Recording(unittest.TestCase):
         self.store.save()
         self.assertEqual(record.yardstick(self.dir.name, '20261117')['source'], 'model.json', 'a slate never measures itself')
         later = record.yardstick(self.dir.name, '20261118')
-        self.assertEqual((later['source'], later['through'], later['readings']), ('recorded', '20261117', 320))
-        self.assertTrue(0.1 < later['total'] < 0.25, later)
+        self.assertEqual((later['source'], later['through'], later['unit']), ('recorded', '20261117', 'points'))
+        self.assertGreaterEqual(later['readings'], 300)
+        self.assertTrue(0.6 < later['total'] < 2.0, later)   # the average of three readings with 2 points of noise each
 
 
 if __name__ == '__main__':

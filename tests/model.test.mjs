@@ -59,68 +59,74 @@ test('drops readings whose game clock outruns the wall clock or runs backwards',
   assert.equal(isClockGlitch(at701, next), false);
 });
 
-test('a signal is a reading 2 out when the reading before it was already 1.5 out', () => {
-  const pre = [150, 0];
-  const game = (devs) => devs.map((d, i) => { const t = 20 + i, a = 30 + i, h = 32 + i, f = model.fair(pre, t, a, h).total, s = model.judge(pre, t, a, h, f, a - h).markets.total.sigma; return [i * 60, t, a, h, f - d * s, a - h, -110, -110]; });
-  const total = (devs, opts) => model.signalsFor(pre, game(devs), null, opts).filter((s) => s.market === 'total').map((s) => s.minute);
-  assert.deepEqual(total([0, 2.3, 0]), [], 'one reading at 2.3 with nothing before it');
-  assert.deepEqual(total([0, 1.6, 2.3]), [22], '1.6 then 2.3 fires on the second');
-  assert.deepEqual(total([0, 1.6, 1.9, 1.7]), [], 'armed but never reaches 2');
-  assert.deepEqual(total([0, -1.8, 2.3]), [], 'armed on the other side does not count');
-  assert.deepEqual(total([0, 2.3, 0], { armDev: null }), [21], 'the one-reading variant');
-  assert.deepEqual(total([0, 1.6, 1.7], { buyDev: 1.5, armDev: 1.5 }), [22], 'the 1.5 twice variant');
+// A game where the book sits `gaps[i]` points under fair at reading i, one reading a minute from minute `start`.
+const steady = (gaps, { pre = [150, 0], start = 20, a0 = 30, h0 = 32, price = -110, every = 60 } = {}) => gaps.map((gap, i) => {
+  const t = start + (i * every) / 60, a = a0 + i, h = h0 + i;
+  return [i * every, t, a, h, model.fair(pre, t, a, h).total - gap, a - h, price, price];
+});
+const totals = (rows, finals = null, opts = {}) => model.signalsFor([150, 0], rows, finals, opts).filter((s) => s.market === 'total');
+const sigma = model.yardstick.total;
+
+test('the signal is judged on a three-minute rolling average, not on one reading', () => {
+  const rows = model.track([150, 0], steady([0, 0, 0, 6, 0, 0, 0]));
+  assert.equal(rows[1].markets.total.avgEdge, null, 'no average until the line has been followed for most of three minutes');
+  close(rows[3].markets.total.avgEdge, 6 / 4, 'the readings of the last 180 seconds, each counted once');
+  close(rows[3].markets.total.avgDev, 6 / 4 / sigma, 'in deviations');
+  close(rows[6].markets.total.avgEdge, 6 / 5, 'plus the reading just before the window, carried forward');
+  assert.deepEqual(totals(steady([0, 0, 0, 6, 0, 0, 0])), [], 'one six-point reading is not a signal');
+  assert.equal(totals(steady([0, 3, 3, 3, 3, 3])).length, 1, 'three points that stay are');
 });
 
-test('a signal needs two qualifying readings in a row, fires once, and settles on the final', () => {
-  const pre = [150, 0];
-  const fairAt = (t, a, h) => model.fair(pre, t, a, h).total;
-  const low = (t, a, h) => Math.round((fairAt(t, a, h) - 6) * 2) / 2; // book six points under fair: a clear over
-  const fine = (t, a, h) => Math.round(fairAt(t, a, h) * 2) / 2;
-  const r = (ts, t, a, h, line) => [ts, t, a, h, line, 0, -110, -110];
-  const oneOff = [r(0, 10, 15, 15, fine(10, 15, 15)), r(60, 11, 17, 15, low(11, 17, 15)), r(120, 12, 17, 17, fine(12, 17, 17))];
-  assert.equal(model.signalsFor(pre, oneOff, null).filter((s) => s.market === 'total').length, 0, 'a single reading is not a signal');
-  const held = [r(0, 10, 15, 15, fine(10, 15, 15)), r(60, 11, 17, 15, low(11, 17, 15)), r(120, 12, 17, 17, low(12, 17, 17)), r(180, 13, 19, 17, low(13, 19, 17))];
-  const open = model.signalsFor(pre, held, null).filter((s) => s.market === 'total');
+test('a signal fires once, at 2 deviations of the average, and settles on the final', () => {
+  const rows = steady([0, 3, 3, 3, 3, 3, 3]);
+  const open = totals(rows);
   assert.equal(open.length, 1);
   assert.equal(open[0].side, 'Over');
-  assert.equal(open[0].minute, 12, 'it fires on the second reading');
+  assert.ok(Math.abs(open[0].dev) >= RULES.buyDev && open[0].dev < 2.5, `fired at ${open[0].dev.toFixed(2)} deviations`);
   assert.equal(open[0].result, 'Pending');
   assert.equal(open[0].priced, 'DraftKings');
   const line = open[0].line;
-  const won = model.signalsFor(pre, held, { away: Math.ceil(line / 2) + 1, home: Math.ceil(line / 2) + 1 }).find((s) => s.market === 'total');
-  const lost = model.signalsFor(pre, held, { away: Math.floor(line / 2) - 2, home: Math.floor(line / 2) - 2 }).find((s) => s.market === 'total');
-  assert.equal(won.result, 'Won');
-  assert.equal(lost.result, 'Lost');
+  assert.equal(totals(rows, { away: Math.ceil(line / 2) + 1, home: Math.ceil(line / 2) + 1 })[0].result, 'Won');
+  assert.equal(totals(rows, { away: Math.floor(line / 2) - 2, home: Math.floor(line / 2) - 2 })[0].result, 'Lost');
+  assert.equal(totals(steady([0, -3, -3, -3, -3, -3]))[0].side, 'Under');
 });
 
-test('the threshold is in deviations, so the points it takes shrink as the game runs out', () => {
-  const pre = [150, 0];
-  const pointsFor = (t, a, h) => model.judge(pre, t, a, h, 150, 0).markets.total.sigma * RULES.buyDev;
-  const early = pointsFor(8, 14, 14), late = pointsFor(32, 60, 60);
-  assert.ok(early > 3.8 && early < 4.8, `two deviations at minute 8: ${early.toFixed(2)} points`);
-  assert.ok(late > 2.2 && late < 3.0, `two deviations at minute 32: ${late.toFixed(2)} points`);
-  const at = (t, a, h, points) => { const f = model.fair(pre, t, a, h).total; return model.judge(pre, t, a, h, f - points, a - h).markets.total; };
-  assert.equal(at(8, 14, 14, 3.5).signal, 'lean', '3.5 points early is short of two deviations');
-  assert.equal(at(32, 60, 60, 3.5).signal, 'buy', '3.5 points late is beyond two deviations');
-  close(at(8, 14, 14, 3).dev, 3 / at(8, 14, 14, 3).sigma, 'dev is the gap over one deviation');
+test('one deviation is a number of points, the same early and late; what it is worth is not', () => {
+  const at = (start) => model.track([150, 0], steady([2.6, 2.6, 2.6, 2.6, 2.6], { start, a0: Math.round(start * 1.85), h0: Math.round(start * 1.85) })).at(-1).markets.total;
+  const early = at(6), late = at(30);
+  close(early.sigma, late.sigma, 'same points per deviation');
+  close(early.avgDev, late.avgDev, 'so the same gap is the same number of deviations');
+  assert.ok(late.chance > early.chance + 0.03, `but it is worth more with less game left: ${early.chance.toFixed(3)} then ${late.chance.toFixed(3)}`);
 });
 
-test('a steep price can cancel a signal, and another threshold can be asked for', () => {
-  const pre = [150, 0], t = 20, a = 30, h = 32, f = model.fair(pre, t, a, h).total;
-  const line = f - 2.2 * model.judge(pre, t, a, h, f, a - h).markets.total.sigma;
-  assert.equal(model.judge(pre, t, a, h, line, a - h, { overPrice: -110 }).markets.total.signal, 'buy');
-  assert.equal(model.judge(pre, t, a, h, line, a - h, { overPrice: -160 }).markets.total.signal, 'lean', '-160 needs 61.5% plus the margin');
-  assert.equal(model.judge(pre, t, a, h, line, a - h, { overPrice: -110, buyDev: 2.5 }).markets.total.signal, 'lean');
-  assert.equal(model.judge(pre, t, a, h, line, a - h, { yard: { total: 0.2, team: 0.2 } }).markets.total.signal, 'lean', 'a wider yardstick makes the same gap less unusual');
+test('a steep price cancels a signal; other thresholds, windows and yardsticks can be asked for', () => {
+  const rows = (price) => steady([2.7, 2.7, 2.7, 2.7, 2.7], { price });
+  assert.equal(totals(rows(-110)).length, 1);
+  assert.equal(totals(rows(-180)).length, 0, '-180 needs 64.3% plus the margin');
+  assert.equal(model.track([150, 0], rows(-180)).at(-1).markets.total.signal, 'lean', 'it stays on watch');
+  assert.equal(totals(rows(-110), null, { buyDev: 3 }).length, 0);
+  assert.equal(totals(rows(-110), null, { yard: { total: 2, team: 2 } }).length, 0, 'a wider yardstick makes the same gap ordinary');
+  assert.deepEqual(totals(steady([0, 0, 0, 6, 0]), null, { windowSec: 0 }).map((s) => s.minute), [23], 'the single-reading comparison rule');
+  assert.deepEqual(totals(steady([0, 0, 2.5, 6, 0]), null, { windowSec: 0, armDev: 1.5 }).map((s) => s.minute), [23], 'single reading, after 1.5 the reading before');
+  assert.deepEqual(totals(steady([0, 0, 0, 6, 0]), null, { windowSec: 0, armDev: 1.5 }), []);
 });
 
 test('no signals in blowouts, on huge spreads, or outside the window', () => {
-  const judgeAt = (pre, t, a, h) => { const f = model.fair(pre, t, a, h).total; return model.judge(pre, t, a, h, f - 8, a - h).markets.total.signal; };
-  assert.equal(judgeAt([150, 0], 20, 30, 32), 'buy');
-  assert.equal(judgeAt([150, 0], 20, 20, 20 + RULES.blowoutLead), null);
-  assert.equal(judgeAt([150, -RULES.blowoutSpread], 20, 30, 32), null);
-  assert.equal(judgeAt([150, 0], RULES.firstMinute - 1, 5, 6), null);
-  assert.equal(judgeAt([150, 0], RULES.lastMinute + 1, 60, 62), null);
+  const held = [4, 4, 4, 4, 4, 4];
+  const count = (opts, pre = [150, 0]) => model.signalsFor(pre, steady(held, { ...opts, pre }), null).filter((s) => s.market === 'total').length;
+  assert.equal(count({}), 1);
+  assert.equal(count({ h0: 30 + RULES.blowoutLead }), 0);
+  assert.equal(count({}, [150, -RULES.blowoutSpread]), 0);
+  assert.equal(count({ start: RULES.lastMinute + 0.5, every: 20 }), 0, 'after the last minute');
+  const early = model.signalsFor([150, 0], steady(held, { start: 0, a0: 0, h0: 0, every: 30 }), null);
+  assert.ok(early.every((s) => s.minute >= RULES.firstMinute), 'nothing before the first minute');
+});
+
+test('a hole in the feed longer than the carry limit starts the average again', () => {
+  const rows = steady([3, 3, 3, 3, 3]);
+  const later = rows.map((r) => [r[0] + 2000, r[1] + 5, r[2] + 8, r[3] + 8, model.fair([150, 0], r[1] + 5, r[2] + 8, r[3] + 8).total - 3, r[5], r[6], r[7]]);
+  const tracked = model.track([150, 0], rows.slice(0, 2).concat(later));
+  assert.equal(tracked[2].markets.total.avgEdge, null, 'the first reading after a long hole has no average');
 });
 
 test('gap summary: average distance and the share of readings beyond the threshold on each side', () => {

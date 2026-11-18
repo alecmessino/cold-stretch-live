@@ -19,8 +19,8 @@ for _ in range(240):
     f = record.fair(total, spread, t, a, h); ft = f['fa'] + f['fh']
     cases.append(dict(pre=[total, spread], t=t, away=a, home=h, book_total=bt, book_spread=bs,
                       fair_away=f['fa'], fair_home=f['fh'], away_short=f['ashort'], home_short=f['hshort'],
-                      dev_total=(ft - bt) / (record.YARD['total'] * f['sd_total']), dev_away=(f['fa'] - (bt / 2 + bs / 2)) / (record.YARD['team'] * f['sd_team']),
-                      dev_home=(f['fh'] - (bt / 2 - bs / 2)) / (record.YARD['team'] * f['sd_team']),
+                      dev_total=(ft - bt) / record.YARD['total'], dev_away=(f['fa'] - (bt / 2 + bs / 2)) / record.YARD['team'],
+                      dev_home=(f['fh'] - (bt / 2 - bs / 2)) / record.YARD['team'],
                       over_total=1 - record.cdf((bt - ft) / f['sd_total']),
                       over_away=1 - record.cdf((bt / 2 + bs / 2 - f['fa']) / f['sd_team']),
                       over_home=1 - record.cdf((bt / 2 - bs / 2 - f['fh']) / f['sd_team'])))

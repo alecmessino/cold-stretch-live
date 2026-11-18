@@ -95,7 +95,8 @@ h2 { font: 600 23px/1.2 var(--serif); letter-spacing: -0.005em; }
 .gloss { display: flex; flex-wrap: wrap; gap: 6px 22px; color: var(--sub); font-size: 14px; }
 .gloss span { display: inline-flex; align-items: center; gap: 8px; }
 .gloss i { display: inline-block; width: 18px; height: 12px; flex: none; }
-.gloss .k-line { height: 0; border-top: 2px solid var(--ink); box-shadow: 0 3px 0 -1px var(--rule-strong); }
+.gloss .k-line { height: 0; border-top: 2px solid var(--ink); }
+.gloss .k-thin { height: 0; border-top: 1px solid var(--rule-strong); }
 .gloss .k-band { background: var(--band); border: 1px solid var(--rule-strong); }
 .gloss .k-low { background: var(--fair); opacity: 0.5; }
 .gloss .k-high { background: var(--book); opacity: 0.5; }
