@@ -1,0 +1,44 @@
+name: recorder
+
+# Records live scores and DraftKings live lines (via ESPN) every 30 seconds while games are on,
+# and commits the tracks to the `data` branch. Each run lasts up to ~5.5 hours and hands over to the next.
+on:
+  schedule:
+    - cron: '17 15 * * *'   # 10:17 AM Eastern, before the first tips
+    - cron: '47 20 * * *'   # 3:47 PM Eastern, backup start
+    - cron: '17 2 * * *'    # 9:17 PM Eastern, backup start
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: recorder
+  cancel-in-progress: false
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check out the data branch
+        run: |
+          git config --global user.name "cbb-recorder"
+          git config --global user.email "actions@users.noreply.github.com"
+          REMOTE="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+          if git ls-remote --exit-code --heads origin data >/dev/null 2>&1; then
+            git clone --depth 1 --branch data "$REMOTE" store
+          else
+            mkdir store && cd store && git init -q -b data && git remote add origin "$REMOTE"
+            git commit -q --allow-empty -m "start data branch" && git push -q -u origin data
+          fi
+      - name: Record
+        run: python3 recorder/record.py --out store --minutes 335 --push | tee run.log
+      - name: Hand over if games are still on
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if grep -q TIME_UP run.log; then gh workflow run recorder.yml --ref "${{ github.ref_name }}"; fi
