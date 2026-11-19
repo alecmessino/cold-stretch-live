@@ -79,6 +79,7 @@ h2 { font: 600 23px/1.2 var(--serif); letter-spacing: -0.005em; }
 .figures > div { display: grid; grid-template-columns: 104px minmax(0, 1fr); column-gap: 16px; align-items: baseline; padding: 11px 0; border-top: 1px solid var(--rule); }
 .figures dd { grid-column: 1; grid-row: 1; font-size: 28px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.05; }
 .figures dt { grid-column: 2; grid-row: 1; color: var(--sub); font-size: 14px; }
+.figures .brief { display: none; }
 
 /* ---------- where each game stands ---------- */
 .block { display: flex; flex-direction: column; gap: 14px; }
@@ -178,6 +179,14 @@ h2 { font: 600 23px/1.2 var(--serif); letter-spacing: -0.005em; }
 .fold[open] summary::before { content: "−"; }
 .fold summary:hover { color: var(--ink); }
 .fold[open] summary { margin-bottom: 10px; }
+/* Record: the tables behind the rule, kept one tap away so the page reads headline, record, ledger */
+.research { border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); padding: 4px 0; }
+.research summary { color: var(--ink); min-height: 48px; }
+.research[open] { padding-bottom: 24px; }
+.fold-body { display: flex; flex-direction: column; gap: 32px; }
+.fold-body h3 { font: 600 20px/1.2 var(--serif); letter-spacing: -0.005em; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px 12px; }
+.standfirst a { color: var(--ink); text-underline-offset: 3px; }
 .sched { background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; }
 .sched button { display: grid; grid-template-columns: 76px minmax(0, 1fr) auto; column-gap: 14px; align-items: baseline; width: 100%; min-height: 44px; padding: 10px 20px; text-align: left; border-top: 1px solid var(--rule-soft); }
 .sched button:first-child { border-top: 0; }
@@ -350,8 +359,17 @@ td.lost { color: var(--sub); }
   .pulse .wide { display: none; }
   .page { padding-top: 20px; }
   .page > section { gap: 30px; }
-  .figures > div { grid-template-columns: 84px minmax(0, 1fr); }
-  .figures dd { font-size: 24px; }
+  /* the figures sit in one row, so the signals start on the first screen */
+  .lead { gap: 20px; }
+  .figures { flex-basis: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); column-gap: 14px; border-top: 1px solid var(--rule); }
+  .figures > div { display: flex; flex-direction: column-reverse; justify-content: flex-end; padding: 10px 0; border-top: 0; }
+  .figures dd { font-size: 21px; }
+  .figures dt { margin-top: 4px; font-size: 13px; line-height: 1.3; }
+  .figures .full, .figures .fig-count { display: none; }
+  .figures .brief { display: inline; }
+  .first-wraps.is-days td:first-child, .first-wraps.is-days th:first-child { min-width: 0; white-space: nowrap; }
+  .first-wraps.is-days :is(th, td):nth-child(2) { display: none; }
+  .seg button { padding: 0 12px; }
   .score { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .mid { grid-column: 1 / -1; grid-row: 1; justify-content: center; }
   .sched button { grid-template-columns: 62px minmax(0, 1fr) auto; padding: 10px 14px; }

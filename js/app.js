@@ -2,11 +2,11 @@
 // Every local file is requested with the same ?v= release number, so a browser or CDN can never pair one release's
 // page with another's scripts. Bump it everywhere on release; tests/release.test.mjs fails if the numbers disagree.
 
-import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=16';
-import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=16';
-import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=16';
-import { SITE, dataBase, safeLink, safeMail } from './site.js?v=16';
-import { boardWords } from './words.js?v=16';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=17';
+import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=17';
+import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=17';
+import { SITE, dataBase, safeLink, safeMail } from './site.js?v=17';
+import { boardWords } from './words.js?v=17';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -31,6 +31,7 @@ const S = {
   model: null, scoresAt: 0, error: null, polls: 0, busy: false, memo: new Map(), histKey: null, yardDay: null, ladder: [],
   mode: (() => { try { return localStorage.getItem('csl.mode') === 'table' ? 'table' : 'trend'; } catch { return 'trend'; } })(),
   allDone: false, allFeed: false, allLedger: false, // show every finished game's chart, every signal in the feed, the whole ledger
+  led: { result: 'all', market: 'all' }, // the ledger's filters
 };
 const isToday = () => S.date === today();
 
@@ -125,7 +126,7 @@ function readingsOf(g) {
 /** Where a live game stands right now: the model's view, and whether a buy has held for two readings. */
 /** The yardstick this slate is judged with: the one the recorder stored with the day, else the one shipped with the model. */
 const yard = () => S.yardDay || S.model.yardstick;
-const dev1 = (v) => (v == null || !Number.isFinite(v) ? '–' : `${signed(v)}σ`);
+const dev1 = (v) => (v == null || !Number.isFinite(v) ? '–' : signed(v)); // in deviations; the label beside it says so
 
 /** A game's readings judged on the rolling average. For a live game with a fresh line, the last row is "now". */
 function tracked(g) {
@@ -250,12 +251,12 @@ function excursion(s, g) {
   const peak = a.reduce((b, p) => (Math.abs(p.avg) > Math.abs(b.avg) ? p : b), a[0]);
   if (g && wideSpread(g)) {
     const spread = `Signals are off in this game: the pregame spread was ${f1(Math.abs(preOf(g)[1]))}, and the rule stops at ${RULES.blowoutSpread}.`;
-    return out ? `${spread} The three-minute average peaked at ${dev1(peak.avg)}, which was ${f1(Math.abs(peak.avgGap))} points.` : spread;
+    return out ? `${spread} The average peaked at ${dev1(peak.avg)} deviations, or ${f1(Math.abs(peak.avgGap))} points.` : spread;
   }
-  if (!out) return `The three-minute average stayed inside ${RULES.buyDev} deviations.`;
+  if (!out) return `Stayed inside ${RULES.buyDev} deviations.`;
   const off = far.filter((p) => p.off).length;
-  const lead = off === out ? ` All of them came with the lead at ${RULES.blowoutLead} or more, where signals are off.` : off ? ` ${off} of them came with the lead at ${RULES.blowoutLead} or more, where signals are off.` : '';
-  return `The three-minute average was beyond ${RULES.buyDev} deviations on ${out} of ${a.length} readings. Peak ${dev1(peak.avg)}, which was ${f1(Math.abs(peak.avgGap))} points.${lead}`;
+  const lead = off === out ? ` All with the lead at ${RULES.blowoutLead} or more, where signals are off.` : off ? ` ${off} with the lead at ${RULES.blowoutLead} or more, where signals are off.` : '';
+  return `Beyond ${RULES.buyDev} deviations on ${out} of ${a.length} readings. Peak ${dev1(peak.avg)}, or ${f1(Math.abs(peak.avgGap))} points.${lead}`;
 }
 
 /** One game as a small multiple. Returns the card and a function that draws its chart once the card is in the page. */
@@ -272,8 +273,9 @@ function trendCard(g, i) {
   const plot = h('span', 'tp-plot'), nums = h('span', 'tp-nums');
   const num = (label, value, kind) => { const c = h('span'); c.append(document.createTextNode(`${label} `), h('b', kind, value)); return c; };
   nums.append(num('Book', now ? f1(now.book) : '–', 'book'), num('Fair', now ? f1(now.fair) : '–', 'fair'), num('Gap', now ? signed(now.gap) : '–', 'gap'), num('3-min average', now && now.avg != null ? dev1(now.avg) : '–', 'gap'));
+  if (now && now.avg != null) nums.lastChild.append(' deviations');
   card.append(head, plot, nums, h('span', 'tp-say', excursion(s, g)));
-  return [card, () => trendPanel(plot, { series: s.map((p) => ({ t: p.t, gap: p.dev, avg: p.avg, off: p.off })), threshold: RULES.buyDev, unit: 'σ', label: `${g.away.name} at ${g.home.name}`, signals: signalsOf(g).filter((x) => x.market === 'total') })];
+  return [card, () => trendPanel(plot, { series: s.map((p) => ({ t: p.t, gap: p.dev, avg: p.avg, off: p.off })), threshold: RULES.buyDev, label: `${g.away.name} at ${g.home.name}`, signals: signalsOf(g).filter((x) => x.market === 'total') })];
 }
 
 const clockText = (g) => (g.state === 'post' ? 'Final' : g.detail.replace(' - ', ' ').replace('Halftime', 'Half'));
@@ -367,7 +369,7 @@ function renderHistogram(gaps) {
   S.histKey = key;
 }
 
-const DONE_SHOWN = 8, FEED_SHOWN = 6, LEDGER_SHOWN = 40;
+const DONE_SHOWN = 8, FEED_SHOWN = 6, LEDGER_SHOWN = 20;
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 
 /** Every signal on the slate in one list: open ones first, then the newest. The quickest read of what there is to act on. */
@@ -544,9 +546,10 @@ function renderGame() {
     const num = (lb, value, kind) => { const c = h('span'); c.append(document.createTextNode(`${lb} `), h('b', kind, value)); return c; };
     nums.append(num(mk === 'total' ? 'Book' : 'Book, implied', end ? f1(end.book) : '–', 'book'), num('Fair', end ? f1(end.fair) : '–', 'fair'), num('Gap', end ? signed(end.gap) : '–', 'gap'));
     nums.append(num('3-min average', end && end.avg != null ? dev1(end.avg) : '–', 'gap'));
+    if (end && end.avg != null) nums.lastChild.append(' deviations');
     card.append(h('span', 'tp-title', title), plot, nums, h('span', 'tp-say', excursion(sm, g)));
     card.addEventListener('click', () => go(gameHash(g.id, mk)));
-    return [card, () => trendPanel(plot, { series: sm.map((p) => ({ t: p.t, gap: p.dev, avg: p.avg, off: p.off })), threshold: RULES.buyDev, unit: 'σ', label: title, signals: signals.filter((x) => x.market === mk) })];
+    return [card, () => trendPanel(plot, { series: sm.map((p) => ({ t: p.t, gap: p.dev, avg: p.avg, off: p.off })), threshold: RULES.buyDev, label: title, signals: signals.filter((x) => x.market === mk) })];
   });
   $('#mk-wall').replaceChildren(...cards.map((c) => c[0]));
   for (const c of cards) c[1]();
@@ -625,7 +628,7 @@ function renderRecord() {
   $('#split-note').textContent = `Game totals are settled at the price the sportsbook was quoting. Team totals are implied from the live total and spread and priced at an estimated −115, so they are the weaker claim. The rule was last changed on ${since}.${back.length ? ' Slates before that were scored again under it after the fact: they show what the rule would have done, and are not a test of it.' : ''}`;
   $('#days-rows').replaceChildren(...S.index.slice().reverse().map((d) => {
     const tr = document.createElement('tr'); tr.tabIndex = 0;
-    for (const [v, c] of [[dayLabel(d.date)], [d.games, 'r'], [d.total_readings == null ? d.readings : d.total_readings, 'r'], [d.gap_abs == null ? '–' : d.gap_abs.toFixed(1), 'r'], [d.dev_low == null ? '–' : `${d.dev_low}%`, 'r'], [d.dev_high == null ? '–' : `${d.dev_high}%`, 'r']]) tr.append(h('td', c || '', v));
+    for (const [v, c] of [[dayLabel(d.date)], [d.games, 'r'], [d.total_readings == null ? d.readings : d.total_readings, 'r'], [d.gap_abs == null ? '–' : d.gap_abs.toFixed(1), 'r'], [d.dev_low == null ? '–' : `${d.dev_low.toFixed(1)}%`, 'r'], [d.dev_high == null ? '–' : `${d.dev_high.toFixed(1)}%`, 'r']]) tr.append(h('td', c || '', v));
     const open = () => go(boardHash(d.date));
     tr.addEventListener('click', open); tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
     return tr;
@@ -654,9 +657,15 @@ function renderRecord() {
   $('#ideas-block').hidden = ideas.length < 2; // the baseline alone is not a comparison
   $('#stage-rows').replaceChildren(...['4 to 20', '20 to 34', '34 to 38'].map((stage) => ladderRow(`Minutes ${stage}`, ladder.filter((r) => r.rule === 'signal' && r.stage === stage))));
   $('#stage-block').hidden = !ladder.length;
-  const ledgerShown = S.allLedger ? L : L.slice(0, LEDGER_SHOWN);
-  $('#ledger-more').hidden = ledgerShown.length === L.length;
-  $('#ledger-more').textContent = `Show all ${L.length} signals`;
+  const settledNow = (s) => s.result === 'Won' || s.result === 'Lost' || s.result === 'Push';
+  const F = L.filter((s) => (S.led.result === 'all' || (S.led.result === 'open' ? !settledNow(s) : s.result === S.led.result)) && (S.led.market === 'all' || (S.led.market === 'total') === isTotal(s)));
+  for (const [id, k] of [['led-result', 'result'], ['led-market', 'market']]) for (const b of document.querySelectorAll(`#${id} button`)) b.setAttribute('aria-pressed', String(b.dataset.v === S.led[k]));
+  const fw = F.filter((s) => s.result === 'Won').length, fl = F.filter((s) => s.result === 'Lost').length, fp = F.filter((s) => s.result === 'Push').length, fo = F.length - fw - fl - fp;
+  $('#ledger-count').textContent = F.length ? `${plural(F.length, 'signal')}: ${fw} won, ${fl} lost${fp ? `, ${fp} pushed` : ''}${fo ? `, ${fo} open` : ''}.` : '';
+  $('#ledger-count').hidden = !F.length;
+  const ledgerShown = S.allLedger ? F : F.slice(0, LEDGER_SHOWN);
+  $('#ledger-more').hidden = ledgerShown.length === F.length;
+  $('#ledger-more').textContent = `Show all ${F.length} signals`;
   $('#ledger-rows').replaceChildren(...ledgerShown.map((s) => {
     const tr = document.createElement('tr'); tr.tabIndex = 0;
     const price = `${s.price > 0 ? '+' : ''}${s.price}${s.priced === 'Assumed' ? ' est.' : ''}`;
@@ -666,7 +675,9 @@ function renderRecord() {
     tr.addEventListener('click', open); tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
     return tr;
   }));
-  $('#ledger-none').hidden = L.length > 0; $('#ledger-sheet').hidden = !L.length;
+  $('#ledger-none').textContent = L.length ? 'No signal matches that choice.' : 'No signals logged yet.';
+  $('#ledger-none').hidden = F.length > 0; $('#ledger-sheet').hidden = !F.length;
+  document.querySelector('.filters').hidden = !L.length;
 }
 
 /* ---------- about, and how the site pays for itself (js/site.js; every slot is off until it is filled in) ---------- */
@@ -772,6 +783,7 @@ $('#primer-ok').addEventListener('click', () => { $('#primer').hidden = true; tr
 $('#more-games').addEventListener('click', () => { S.allDone = true; render(); });
 $('#feed-more').addEventListener('click', () => { S.allFeed = true; render(); });
 $('#ledger-more').addEventListener('click', () => { S.allLedger = true; render(); });
+for (const [id, k] of [['led-result', 'result'], ['led-market', 'market']]) for (const b of document.querySelectorAll(`#${id} button`)) b.addEventListener('click', () => { S.led[k] = b.dataset.v; S.allLedger = false; renderRecord(); });
 
 /* ---------- sharing: the phone's share sheet where there is one, the clipboard where there is not ---------- */
 function shareWords(kind) {
@@ -858,7 +870,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 (async () => {
-  try { S.model = createModel(await getJSON('model.json?v=16')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  try { S.model = createModel(await getJSON('model.json?v=17')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
   window.cslBooted = true;
   setupSite();
   await applyRoute();
