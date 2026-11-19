@@ -7,7 +7,7 @@ export const SITE = {
 
   // Address the recorder's files are served from, ending in a slash.
   // Empty: worked out from a github.io address, which is all a site without its own domain needs.
-  data: 'https://raw.githubusercontent.com/alecmessino/cold-stretch-live/data/',
+  data: 'https://raw.githubusercontent.com/priceofpace1/cold-stretch-live/data/',
 
   // Public link to the code and recorded data. Empty: no link is shown.
   source: '',
