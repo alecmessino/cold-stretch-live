@@ -15,7 +15,7 @@ on:
   # by anyone who can push: change .github/recorder-start and push.
   push:
     branches: [main]
-    paths: ['recorder/**', '.github/workflows/recorder.yml', '.github/recorder-start']
+    paths: ['recorder/**', 'model.json', '.github/workflows/recorder.yml', '.github/recorder-start']
 
 permissions:
   contents: write
@@ -43,7 +43,7 @@ jobs:
             git commit -q --allow-empty -m "start data branch" && git push -q -u origin data
           fi
       - name: Record
-        run: python3 recorder/record.py --out store --minutes 335 --push | tee run.log
+        run: python3 recorder/record.py --out store --minutes 335 --push --watch | tee run.log
       - name: Hand over if games are still on
         if: always()
         env:

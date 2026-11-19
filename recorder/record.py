@@ -265,6 +265,17 @@ def poll(store, pre_cache):
     return n_in, n_pre
 
 def git(out, *args): return subprocess.run(['git', '-C', out] + list(args), capture_output=True, text=True)
+WATCHED = ('recorder', 'model.json', '.github/recorder-start')
+
+def superseded(repo=ROOT):
+    """True when main has moved on and the recorder's own files differ from the ones this run started with. A run that
+    finds this hands over, so a rule change takes effect within minutes even in the middle of a slate."""
+    try:
+        if git(repo, 'fetch', '-q', '--depth', '1', 'origin', 'main').returncode != 0: return False
+        return git(repo, 'diff', '--quiet', 'HEAD', 'FETCH_HEAD', '--', *WATCHED).returncode == 1
+    except Exception:
+        return False
+
 def push(out):
     git(out, 'add', '-A')
     if git(out, 'diff', '--cached', '--quiet').returncode == 0: return
@@ -273,7 +284,7 @@ def push(out):
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument('--out', default='store'); ap.add_argument('--minutes', type=float, default=335)
-    ap.add_argument('--push', action='store_true'); ap.add_argument('--import-jsonl'); ap.add_argument('--rebuild', action='store_true'); ap.add_argument('--reyard', default='')
+    ap.add_argument('--push', action='store_true'); ap.add_argument('--watch', action='store_true'); ap.add_argument('--import-jsonl'); ap.add_argument('--rebuild', action='store_true'); ap.add_argument('--reyard', default='')
     a = ap.parse_args(); store = Store(a.out)
     if a.rebuild:   # recompute the ledger, ladder and summaries of every stored slate with the current rules
         for name in sorted(os.listdir(os.path.join(a.out, 'tracks'))):
@@ -289,7 +300,7 @@ def main():
             if (s.get('period') or 0) > 2: continue
             store.add(date, s['id'], s['away'], s['home'], None, None, pre, s.get('detail') or 'Live', None, [s['ts'], round(elapsed(s['period'], s['clock']), 2), int(s['as']), int(s['hs'])] + lv)
         store.save(); return
-    end = time.time() + a.minutes * 60; last_save = last_push = 0; idle_since = None; pre_cache = {}; finished = False
+    end = time.time() + a.minutes * 60; last_save = last_push = 0; idle_since = None; pre_cache = {}; finished = False; last_watch = time.time()
     while time.time() < end:
         t0 = time.time()
         try:
@@ -302,6 +313,9 @@ def main():
         if t0 - last_save >= 60: store.save(); last_save = t0
         if a.push and t0 - last_push >= 300: push(a.out); last_push = t0
         if finished: break
+        if a.watch and t0 - last_watch >= 300:   # newer recorder code on main: save and hand over to a fresh run
+            last_watch = t0
+            if superseded(): print('NEWER_RECORDER', flush=True); break
         time.sleep(max(1, (30 if n_in else 120) - (time.time() - t0)))
     store.save()
     if a.push: push(a.out)

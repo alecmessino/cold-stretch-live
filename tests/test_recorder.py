@@ -102,6 +102,21 @@ class Recording(unittest.TestCase):
         self.assertEqual(self.total(self.game(held, start=record.T1 + 0.5, every=20)), [])
         self.assertTrue(all(s['t'] >= record.T0 for s in record.signals_for(self.game(held, start=0, a0=0, h0=0, every=30))))
 
+    def test_a_run_hands_over_when_the_recorder_on_main_has_changed(self):
+        import subprocess
+        run = lambda cwd, *a: subprocess.run(['git', '-c', 'user.name=t', '-c', 'user.email=t@t', *a], cwd=cwd, check=True, capture_output=True)
+        origin, clone = os.path.join(self.dir.name, 'origin'), os.path.join(self.dir.name, 'clone')
+        os.makedirs(os.path.join(origin, 'recorder')); run(origin, 'init', '-q', '-b', 'main')
+        open(os.path.join(origin, 'recorder', 'record.py'), 'w').write('one'); open(os.path.join(origin, 'index.html'), 'w').write('site')
+        run(origin, 'add', '-A'); run(origin, 'commit', '-q', '-m', 'start')
+        run(self.dir.name, 'clone', '-q', 'file://' + origin, clone)
+        self.assertFalse(record.superseded(clone), 'nothing has changed')
+        open(os.path.join(origin, 'index.html'), 'w').write('site, restyled'); run(origin, 'commit', '-qam', 'site only')
+        self.assertFalse(record.superseded(clone), 'a change to the site alone does not interrupt recording')
+        open(os.path.join(origin, 'recorder', 'record.py'), 'w').write('two'); run(origin, 'commit', '-qam', 'new rule')
+        self.assertTrue(record.superseded(clone), 'a change to the recorder does')
+        self.assertFalse(record.superseded(os.path.join(self.dir.name, 'nowhere')), 'and a failure to check never stops a run')
+
     def test_the_quote_on_screen_must_still_carry_the_edge(self):
         self.assertEqual(self.total(self.game([5, 5, 5, 0.2])), [], 'the average is far out, but the book has just closed the gap: nothing to buy')
         s = self.total(self.game([5, 5, 5, 0.2, 5]))
