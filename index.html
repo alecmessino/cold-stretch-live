@@ -23,7 +23,7 @@
 <meta name="apple-mobile-web-app-title" content="Price of Pace">
 <link rel="preload" href="fonts/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/app.css?v=12">
+<link rel="stylesheet" href="css/app.css?v=13">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -215,7 +215,7 @@
       <h2>What each rule would have done</h2>
       <p class="note">Nine rules run on the same readings, so the rule is chosen on results and not by feel. Readings are about a minute apart. One deviation is the usual spread of the three-minute average, about 1.2 points for a game total. November 17 is measured against itself; every later slate uses only the slates before it. The last row is the signal applied only where it is switched off, to test that choice. It is not in the record.</p>
       <div class="sheet" id="ladder-sheet">
-        <table>
+        <table class="first-wraps">
           <thead><tr><th>Rule</th><th class="r">Signals</th><th class="r">Won–lost</th><th class="r">Win rate</th><th class="r">Units</th><th class="r">Open</th></tr></thead>
           <tbody id="ladder-rows"></tbody>
         </table>
@@ -223,11 +223,22 @@
       <p class="quiet" id="ladder-none" hidden>Nothing recorded yet.</p>
     </div>
 
+    <div class="block" id="ideas-block" hidden>
+      <h2>Ideas under test</h2>
+      <p class="note">Each row is the signal with one thing changed, run on the same readings. None of them is in the record. An idea earns its way into the rule by holding up here over a few hundred signals, not over one night.</p>
+      <div class="sheet">
+        <table class="first-wraps">
+          <thead><tr><th>Idea</th><th class="r">Signals</th><th class="r">Won–lost</th><th class="r">Win rate</th><th class="r">Units</th><th class="r">Open</th></tr></thead>
+          <tbody id="idea-rows"></tbody>
+        </table>
+      </div>
+    </div>
+
     <div class="block" id="stage-block">
       <h2>The signal by stage of the game</h2>
       <p class="note">If one stretch of the game carries the results, the rule should be narrowed to it.</p>
       <div class="sheet">
-        <table>
+        <table class="first-wraps">
           <thead><tr><th>Stage</th><th class="r">Signals</th><th class="r">Won–lost</th><th class="r">Win rate</th><th class="r">Units</th><th class="r">Open</th></tr></thead>
           <tbody id="stage-rows"></tbody>
         </table>
@@ -277,7 +288,7 @@
 </footer>
 
 <script src="vendor/d3.v7.9.2.min.js"></script>
-<script type="module" src="js/app.js?v=12"></script>
+<script type="module" src="js/app.js?v=13"></script>
 <script>
   // If the app has not started after ten seconds, say so instead of sitting on "Loading".
   setTimeout(function () {

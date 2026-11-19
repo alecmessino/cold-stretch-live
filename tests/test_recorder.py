@@ -102,6 +102,17 @@ class Recording(unittest.TestCase):
         self.assertEqual(self.total(self.game(held, start=record.T1 + 0.5, every=20)), [])
         self.assertTrue(all(s['t'] >= record.T0 for s in record.signals_for(self.game(held, start=0, a0=0, h0=0, every=30))))
 
+    def test_a_market_fires_once_a_game_unless_it_is_allowed_again_after_the_gap_closes(self):
+        there_and_back = [4] * 6 + [0] * 6 + [4] * 6   # out, closed, out again
+        once = self.total(self.game(there_and_back))
+        twice = [s for s in record.signals_for(self.game(there_and_back), again=1.0) if s['mkt'] == 'total']
+        self.assertEqual(len(once), 1)
+        self.assertEqual(len(twice), 2)
+        self.assertEqual(twice[0]['id'], once[0]['id'], 'the first signal is the same one')
+        self.assertNotEqual(twice[1]['id'], twice[0]['id'], 'and the second has its own id')
+        stays_out = [s for s in record.signals_for(self.game([4] * 18), again=1.0) if s['mkt'] == 'total']
+        self.assertEqual(len(stays_out), 1, 'a gap that never closes is still one signal')
+
     def test_lopsided_spots_are_judged_apart_and_kept_out_of_the_yardstick(self):
         held = [4] * 6; shadow = lambda g: [s for s in record.signals_for(g, lopsided=True) if s['mkt'] == 'total']
         wide, led, close = self.game(held, pre=(150, -record.BLOW_SPREAD)), self.game(held, h0=30 + record.BLOW_LEAD), self.game(held)
@@ -123,8 +134,8 @@ class Recording(unittest.TestCase):
         self.assertIsInstance(json.load(open(os.path.join(self.dir.name, 'ledger.json'))), list)
         self.assertEqual(day['yardstick']['source'], 'model.json', 'no earlier slate, so the shipped yardstick is used and stored with the day')
         ladder = json.load(open(os.path.join(self.dir.name, 'ladder.json')))
-        self.assertEqual({r['rule'] for r in ladder}, {v[0] for v in record.VARIANTS} | {record.SHADOW[0]})
-        self.assertEqual(len(ladder), (len(record.VARIANTS) + 1) * len(record.STAGES))
+        self.assertEqual({r['rule'] for r in ladder}, {v[0] for v in record.VARIANTS} | {record.SHADOW[0]} | {i[0] for i in record.IDEAS})
+        self.assertEqual(len(ladder), (len(record.VARIANTS) + 1 + len(record.IDEAS)) * len(record.STAGES))
 
     def test_stored_slates_are_judged_again_when_the_rules_change(self):
         self.add(0, 10, 15, 15, 150.5)

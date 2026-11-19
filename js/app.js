@@ -2,10 +2,10 @@
 // Every local file is requested with the same ?v= release number, so a browser or CDN can never pair one release's
 // page with another's scripts. Bump it everywhere on release; tests/release.test.mjs fails if the numbers disagree.
 
-import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=12';
-import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=12';
-import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=12';
-import { SITE, dataBase, safeLink, safeMail } from './site.js?v=12';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=13';
+import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=13';
+import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=13';
+import { SITE, dataBase, safeLink, safeMail } from './site.js?v=13';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -546,6 +546,16 @@ const RULE_LABELS = {
   'one-2-after-1.5': 'A single reading at 2, after 1.5 a minute earlier',
   lopsided: 'The signal where it is switched off: wide spreads and big leads',
 };
+// The signal with one thing changed. Tracked beside the record so a change to the rule is made on results.
+const IDEA_LABELS = {
+  signal: 'The signal as it stands',
+  'signal-totals': 'Game totals only',
+  'signal-teams': 'Team totals only (estimated prices)',
+  'signal-to-34': 'Stopping at minute 34',
+  'signal-repeat': 'Firing again after the gap closes',
+  'cold-over': 'Cold-stretch overs: scoring well behind pace',
+  'cold-over-lopsided': 'Cold-stretch overs in lopsided games',
+};
 function renderRecord() {
   const L = S.ledger.slice().sort((a, b) => b.ts - a.ts);
   const tally = (rows) => { const w = rows.filter((s) => s.result === 'Won').length, l = rows.filter((s) => s.result === 'Lost').length; return w + l ? `${w}–${l}` : '–'; };
@@ -575,6 +585,9 @@ function renderRecord() {
   const ladder = S.ladder.filter((r) => r.rule), have = (rule) => ladder.some((r) => r.rule === rule);
   $('#ladder-rows').replaceChildren(...Object.entries(RULE_LABELS).filter(([rule]) => have(rule)).map(([rule, label]) => ladderRow(label, ladder.filter((r) => r.rule === rule && r.stage === 'all'))));
   $('#ladder-none').hidden = ladder.length > 0; $('#ladder-sheet').hidden = !ladder.length;
+  const ideas = Object.entries(IDEA_LABELS).filter(([rule]) => have(rule));
+  $('#idea-rows').replaceChildren(...ideas.map(([rule, label]) => ladderRow(label, ladder.filter((r) => r.rule === rule && r.stage === 'all'))));
+  $('#ideas-block').hidden = ideas.length < 2; // the baseline alone is not a comparison
   $('#stage-rows').replaceChildren(...['4 to 20', '20 to 34', '34 to 38'].map((stage) => ladderRow(`Minutes ${stage}`, ladder.filter((r) => r.rule === 'signal' && r.stage === stage))));
   $('#stage-block').hidden = !ladder.length;
   $('#ledger-rows').replaceChildren(...L.map((s) => {
@@ -756,7 +769,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 (async () => {
-  try { S.model = createModel(await getJSON('model.json?v=12')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  try { S.model = createModel(await getJSON('model.json?v=13')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
   window.cslBooted = true;
   setupSite();
   await applyRoute();

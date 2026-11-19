@@ -307,6 +307,11 @@ td.lost { color: var(--sub); }
   .tm .pt { order: 2; margin-left: auto; padding-left: 12px; }
 }
 @media (max-width: 620px) {
+  table.first-wraps { min-width: 0; }
+  .first-wraps th, .first-wraps td { padding: 10px 8px; }
+  .first-wraps td:first-child, .first-wraps th:first-child { white-space: normal; min-width: 8.5em; padding-left: 14px; }
+  .first-wraps td:last-child, .first-wraps th:last-child { padding-right: 14px; }
+  .first-wraps :is(th, td):nth-child(4), .first-wraps :is(th, td):nth-child(6) { display: none; } /* win rate and open: derivable, and the row has to fit */
   .mast-in { padding-top: 18px; }
   .wordmark { font-size: 26px; }
   .tagline { display: none; }

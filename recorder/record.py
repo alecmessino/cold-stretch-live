@@ -26,8 +26,16 @@ M0, M1, MIN_YARD_READINGS = 4, 38, 300
 VARIANTS = (('signal', BUY_DEV, WINDOW, None), ('avg3-1.5', 1.5, WINDOW, None), ('avg3-2.5', 2.5, WINDOW, None), ('avg3-3', 3.0, WINDOW, None),
             ('avg2-2', 2.0, 120, None), ('avg5-2', 2.0, 300, None), ('one-2', 2.0, 0, None), ('one-3', 3.0, 0, None), ('one-2-after-1.5', 2.0, 0, 1.5))
 SHADOW = ('lopsided', BUY_DEV, WINDOW, None)   # the signal, judged only where it is switched off (wide spread or big lead): tracked, not counted
+# Ideas under test: each is the signal with one thing changed, tracked beside the record and never in it.
+# (name, extra arguments for signals_for, filter on the signals it returns)
+IDEAS = (('signal-totals', {}, lambda s: s['mkt'] == 'total'),             # game totals only: the one market with a real posted price
+         ('signal-teams', {}, lambda s: s['mkt'] != 'total'),              # team totals only: implied lines at an assumed price
+         ('signal-to-34', {}, lambda s: s['t'] < 34),                      # stop before the endgame, where fouls and the clock take over
+         ('signal-repeat', {'again': 1.0}, None),                          # let a market fire again after its gap has closed
+         ('cold-over', {}, lambda s: s['spot'] == 'Cold spot'),            # the original thesis: the over when scoring is well behind pace
+         ('cold-over-lopsided', {'lopsided': True}, lambda s: s['spot'] == 'Cold spot'))
 STAGES = (('all', 0, 41), ('4 to 20', 0, 20), ('20 to 34', 20, 34), ('34 to 38', 34, 41))
-RULES_VERSION = '2026-11-18.4'   # change this whenever a rule, window or variant changes: the recorder then re-judges every stored slate when it next starts
+RULES_VERSION = '2026-11-19.1'   # change this whenever a rule, window or variant changes: the recorder then re-judges every stored slate when it next starts
 MODEL = json.load(open(os.path.join(ROOT, 'model.json')))
 ROWS = {r['minute']: r for r in MODEL['rows']}; CDF = MODEL['cdf']; YARD = {k: MODEL['yardstick'][k] for k in ('total', 'team')}
 
@@ -111,15 +119,17 @@ def slate_date(now=None):
     now = now or datetime.datetime.now(datetime.timezone.utc)
     return (now - datetime.timedelta(hours=10)).strftime('%Y%m%d')
 
-def signals_for(g, yard=None, k=BUY_DEV, window=WINDOW, arm=None, lopsided=False):
+def signals_for(g, yard=None, k=BUY_DEV, window=WINDOW, arm=None, lopsided=False, again=None):
     """First reading per market and side whose averaged gap sits k deviations from zero, at a price the chance clears.
     arm: if given, the reading before it must already have been that many deviations out on the same side.
     Signals are off in lopsided spots (a pregame spread of BLOW_SPREAD or a lead of BLOW_LEAD). lopsided=True judges only
     those spots instead: it is kept beside the record, never in it, to show what leaving them out costs or saves.
+    again: if given, a market and side that has fired may fire once more after its average has come back inside that many
+    deviations or crossed to the other side. Left out, each market and side fires once a game.
     Team totals are implied from the live total and spread."""
     yard = yard or YARD
     if not g.get('pre'): return []
-    tot, hsp = g['pre']; out = []; fired = set(); fin = g.get('final'); prev_ok = {}; wide = abs(hsp) >= BLOW_SPREAD
+    tot, hsp = g['pre']; out = []; fired = set(); count = {}; fin = g.get('final'); prev_ok = {}; wide = abs(hsp) >= BLOW_SPREAD
     if wide and not lopsided: return []
     for r in rolled(g, window):
         t, a, h, f, bt, bs = r['t'], r['a'], r['h'], r['f'], r['bt'], r['bs']
@@ -132,12 +142,15 @@ def signals_for(g, yard=None, k=BUY_DEV, window=WINDOW, arm=None, lopsided=False
             gap = r['avg'][i]; sigma = y; dev = gap / sigma; p_over = 1 - cdf(-gap / sd_rest)
             side, p, price = ('Over', p_over, o_price) if gap >= 0 else ('Under', 1 - p_over, u_price)
             paid = price if price is not None else -115; size = abs(dev)
+            if again is not None:   # the gap has closed, or flipped: this market can be bought again
+                for held in ('Over', 'Under'):
+                    if (key, held) in fired and (held != side or size < again): fired.discard((key, held))
             if size <= 0 or p < break_even(paid) + MARGIN: continue
             now_ok[(key, side)] = size
             if size >= k and (arm is None or prev_ok.get((key, side), 0) >= arm) and (key, side) not in fired:
-                fired.add((key, side))
+                fired.add((key, side)); count[(key, side)] = nth = count.get((key, side), 0) + 1
                 res = 'Pending' if final is None else 'Push' if final == line else 'Won' if (final > line) == (side == 'Over') else 'Lost'
-                out.append(dict(id=f"{g['id']}|{key}|{side}", date=g['date'], game=g['id'], matchup=f"{g['away']} at {g['home']}", mkt=key, market=market, side=side,
+                out.append(dict(id=f"{g['id']}|{key}|{side}" + (f'|{nth}' if nth > 1 else ''), date=g['date'], game=g['id'], matchup=f"{g['away']} at {g['home']}", mkt=key, market=market, side=side,
                                 spot='Cold spot' if (cold and side == 'Over') else 'Book below fair' if side == 'Over' else 'Book above fair',
                                 ts=r['ts'], t=round(t, 1), score=f'{a}-{h}', line=line, price=paid, priced='DraftKings' if price is not None else 'Assumed',
                                 fair=round(fv, 1), edge=round(gap, 1), dev=round(dev, 2), sigma=round(sigma, 2), chance=round(100 * p), final=final, result=res))
@@ -179,8 +192,9 @@ class Store:
             json.dump({'date': date, 'updated': int(time.time()), 'yardstick': yard, 'games': gl}, open(self.path(date), 'w'), separators=(',', ':'))
             ledger = [s for s in ledger if s['date'] != date] + [s for g in gl for s in signals_for(g, yard)]
             ladder = [r for r in ladder if r['date'] != date]
-            for rule, k, window, arm in VARIANTS + (SHADOW,):   # what each rule would have done, overall and by stage of the game
-                every = [s for g in gl for s in signals_for(g, yard, k, window, arm, rule == SHADOW[0])]
+            runs = [(rule, [s for g in gl for s in signals_for(g, yard, k, window, arm, rule == SHADOW[0])]) for rule, k, window, arm in VARIANTS + (SHADOW,)]
+            runs += [(rule, [s for g in gl for s in signals_for(g, yard, **extra) if keep is None or keep(s)]) for rule, extra, keep in IDEAS]
+            for rule, every in runs:   # what each rule or idea would have done, overall and by stage of the game
                 for stage, lo, hi in STAGES:
                     sig = [s for s in every if lo <= s['t'] < hi]; res = [s['result'] for s in sig]
                     ladder.append(dict(date=date, rule=rule, stage=stage, n=len(sig), won=res.count('Won'), lost=res.count('Lost'), push=res.count('Push'), open=res.count('Pending'),
