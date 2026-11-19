@@ -11,7 +11,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='4' fill='%230F1B2D'/%3E%3Cpath d='M6 21h7v-6h6v-5h7' fill='none' stroke='%23F0843C' stroke-width='3'/%3E%3Cpath d='M6 17c7 0 12-2 20-9' fill='none' stroke='%237FA2FF' stroke-width='3'/%3E%3C/svg%3E">
 <link rel="preload" href="fonts/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/app.css?v=9">
+<link rel="stylesheet" href="css/app.css?v=10">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -19,8 +19,8 @@
 <header class="mast">
   <div class="wrap mast-in">
     <div>
-      <a class="wordmark" href="#/board">Cold Stretch Live</a>
-      <p class="tagline">College basketball live totals, measured against a fair number</p>
+      <a class="wordmark" id="wordmark" href="#/board">Cold Stretch Live</a>
+      <p class="tagline" id="tagline">College basketball live totals, measured against a fair number</p>
     </div>
     <p class="pulse" id="pulse" role="status" aria-live="polite">Loading</p>
   </div>
@@ -29,6 +29,7 @@
       <button type="button" data-view="board" aria-current="page">Board</button>
       <button type="button" data-view="game">Game</button>
       <button type="button" data-view="record">Record</button>
+      <button type="button" data-view="about">About</button>
     </nav>
   </div>
 </header>
@@ -58,6 +59,7 @@
         <div><dt>signals: the three-minute average 2 deviations out, at a price that pays</dt><dd id="fig-sig">–</dd></div>
       </dl>
     </div>
+    <p class="book-link" id="book-line" hidden></p>
 
     <div class="block">
       <div class="block-head">
@@ -123,6 +125,7 @@
         <button type="button" data-market="home" aria-pressed="false" id="mk-home">Home</button>
       </div>
       <p class="read" id="read"></p>
+      <p class="book-link" id="book-link" hidden></p>
       <dl class="facts">
         <div class="book"><dt id="f-book-l">Sportsbook live</dt><dd id="f-book">–</dd></div>
         <div class="fair"><dt id="f-fair-l">Fair</dt><dd id="f-fair">–</dd></div>
@@ -227,18 +230,38 @@
       <p class="quiet small">Game totals are settled at the sportsbook’s live price. Team totals are implied from the live total and spread, and priced at an estimated -115.</p>
     </div>
   </section>
+  <section id="view-about" hidden>
+    <div class="about" id="about"></div>
+  </section>
+
+  <section class="signup" id="signup" aria-labelledby="signup-h" hidden>
+    <div class="signup-say">
+      <h2 id="signup-h">The slate by email</h2>
+      <p class="note" id="signup-pitch"></p>
+    </div>
+    <form class="signup-form" id="signup-form" method="post" target="_blank" rel="noopener">
+      <label for="signup-email">Email address</label>
+      <div class="signup-row">
+        <input type="email" id="signup-email" autocomplete="email" inputmode="email" required placeholder="you@example.com">
+        <button type="submit" class="key is-primary">Subscribe</button>
+      </div>
+      <p class="note">Unsubscribe from any email. The address is used for this list and nothing else.</p>
+    </form>
+  </section>
+
 </main>
 
 <footer class="wrap">
   <div class="foot">
     <p>Scores and play-by-play come from ESPN. Lines are a sportsbook’s pregame and live numbers as ESPN publishes them. ESPN drops the live line at the final whistle, so a recorder saves it every 30 seconds while games are on.</p>
     <p>Fair is the current score plus a rest-of-game estimate fitted on 16,086 Division I games, 2022–23 through December 2025. It knows nothing about injuries, foul trouble or who is on the floor. Signals are judged on a three-minute rolling average of the gap, measured in deviations: the usual spread of that average, re-estimated from every completed slate. This is information, not betting advice.</p>
-    <p><a href="https://github.com/alecmessino/cold-stretch-live">Source, model and recorded data</a></p>
+    <p class="foot-links" id="foot-links"><a href="#/about">About, method and privacy</a></p>
+    <p>For adults of legal betting age where they are. If betting has stopped being fun, call or text 1-800-GAMBLER.</p>
   </div>
 </footer>
 
 <script src="vendor/d3.v7.9.2.min.js"></script>
-<script type="module" src="js/app.js?v=9"></script>
+<script type="module" src="js/app.js?v=10"></script>
 <script>
   // If the app has not started after ten seconds, say so instead of sitting on "Loading".
   setTimeout(function () {

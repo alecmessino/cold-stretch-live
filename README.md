@@ -2,7 +2,7 @@
 
 A live board for one question about college basketball totals: **when a team goes cold, does the book's live number drop further than it should?**
 
-**Open it:** https://alecmessino.github.io/cold-stretch-live/
+The site is served from this repository by GitHub Pages. Where it lives, and every way it pays for itself, is set in one file: `js/site.js`.
 
 The board opens with the slate in one sentence: how far DraftKings' live total has run from a fair final-score estimate, and which way it missed. Under it, every game with a line gets a small chart of fair minus book by game minute, all on one scale: a shaded no-trade band, colour where a reading leaves it, and a dotted line two standard deviations out. A table view puts the same games on one row each. Open a game to see the book's number and the fair number minute by minute, above the score flow for both teams. A recorder saves every game's live line as it happens, and a ledger settles each signal against the final score.
 
@@ -91,11 +91,26 @@ Two colours carry meaning and nothing else does. Orange is the sportsbook's numb
 
 Every view has its own link, so a game and market can be shared directly.
 
+## Site settings (`js/site.js`)
+
+Nothing else in the code names an owner or an address. Each slot draws nothing until it is filled in.
+
+| Setting | What it does |
+|---|---|
+| `name`, `tagline` | Masthead and page title. |
+| `data` | Address of the recorder's files. Needed on a custom domain; a github.io address works it out. |
+| `source`, `contact` | Optional footer link to the code and a contact address on the About page. |
+| `analytics` | Cloudflare Web Analytics token. Counts visits without cookies. |
+| `newsletter.action` | The provider's plain HTML form address. Turns on the signup box under every view. |
+| `book.name`, `book.url` | A sportsbook referral link shown beside a live signal and marked "paid link" where it is clicked. The About page discloses it. |
+
+For a custom domain: add a `CNAME` file with the domain, set `data` to `https://raw.githubusercontent.com/<owner>/<repo>/data/`, and point DNS at GitHub Pages.
+
 ## Run it locally
 
 ```sh
 python3 -m http.server 8000
-# http://localhost:8000/?data=https://raw.githubusercontent.com/alecmessino/cold-stretch-live/data/
+# http://localhost:8000/?data=https://raw.githubusercontent.com/<owner>/<repo>/data/
 ```
 
 ```sh

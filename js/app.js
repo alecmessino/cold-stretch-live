@@ -2,9 +2,10 @@
 // Every local file is requested with the same ?v= release number, so a browser or CDN can never pair one release's
 // page with another's scripts. Bump it everywhere on release; tests/release.test.mjs fails if the numbers disagree.
 
-import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=9';
-import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=9';
-import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=9';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=10';
+import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=10';
+import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=10';
+import { SITE, dataBase, safeLink, safeMail } from './site.js?v=10';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -12,14 +13,8 @@ const h = (tag, cls, text) => { const e = document.createElement(tag); if (cls) 
 
 const POLL_MS = 20000;
 const RECORDED_EVERY = 9; // polls between reloads of the recorder's files
-// Recorded tracks live on the repo's `data` branch. ?data=<url> overrides, for local work.
-const DATA = (() => {
-  const q = new URLSearchParams(location.search).get('data');
-  if (q) return q.replace(/\/?$/, '/');
-  const m = location.hostname.match(/^(.+)\.github\.io$/);
-  const repo = location.pathname.split('/')[1];
-  return m && repo ? `https://raw.githubusercontent.com/${m[1]}/${repo}/data/` : 'data/';
-})();
+// Recorded tracks live on the repo's `data` branch. js/site.js says where; ?data=<url> overrides, for local work.
+const DATA = dataBase();
 
 // ESPN files a late tip under the Eastern date it started on, so a slate rolls over at 5 AM Eastern.
 const slateOf = (ms) => new Date(ms - 10 * 36e5).toISOString().slice(0, 10).replace(/-/g, '');
@@ -181,6 +176,7 @@ function route() {
   const [view, a, b, c] = location.hash.replace(/^#\/?/, '').split('/');
   if (view === 'game') return { view: 'game', date: /^\d{8}$/.test(a || '') ? a : S.date, sel: b || S.sel, market: ['total', 'away', 'home'].includes(c) ? c : S.market };
   if (view === 'record') return { view: 'record', date: S.date };
+  if (view === 'about') return { view: 'about', date: S.date };
   return { view: 'board', date: /^\d{8}$/.test(a || '') ? a : S.view === 'board' ? today() : S.date };
 }
 function go(hash) { if (location.hash === hash) applyRoute(); else location.hash = hash; }
@@ -194,7 +190,7 @@ async function applyRoute() {
   if (dateChanged) { S.games.clear(); S.recorded = new Map(); S.yardDay = null; S.cursor = -1; S.histKey = null; }
   for (const b of document.querySelectorAll('.nav button')) b.toggleAttribute('aria-current', false);
   const cur = $(`.nav button[data-view="${S.view}"]`); if (cur) cur.setAttribute('aria-current', 'page');
-  for (const v of ['board', 'game', 'record']) $(`#view-${v}`).hidden = v !== S.view;
+  for (const v of ['board', 'game', 'record', 'about']) $(`#view-${v}`).hidden = v !== S.view;
   render();
   if (dateChanged || !S.games.size) await refresh(true);
   if (S.view === 'game') openSelected();
@@ -402,6 +398,7 @@ function renderBoard() {
   $('#final-rows').replaceChildren(...done.map((g) => schedRow(g, `${g.away.pts}–${g.home.pts}`)));
   $('#finals-sum').textContent = `${done.length} finished game${done.length === 1 ? '' : 's'} with no line recorded`;
   $('#finals').hidden = !done.length;
+  renderBookLine();
   renderHistogram(gaps);
 }
 
@@ -453,6 +450,7 @@ function renderGame() {
   $('#lg-away').textContent = g.away.name; $('#lg-home').textContent = g.home.name;
   const [text, cls] = sentence(g, st, k, book);
   $('#read').textContent = text; $('#read').className = `read ${cls}`;
+  renderBookLink(g, st);
 
   const m = st ? st.markets[k] : null;
   const rows = tracked(g), lastRec = rows.length ? rows[rows.length - 1].markets[k] : null;
@@ -590,6 +588,88 @@ function renderRecord() {
   $('#ledger-none').hidden = L.length > 0; $('#ledger-sheet').hidden = !L.length;
 }
 
+/* ---------- about, and how the site pays for itself (js/site.js; every slot is off until it is filled in) ---------- */
+const BOOK = safeLink(SITE.book.url) && SITE.book.name ? { name: SITE.book.name, url: safeLink(SITE.book.url) } : null;
+const LIST = safeLink(SITE.newsletter.action);
+
+/** A referral link, labelled as paid at the place it is clicked. */
+function bookLink(host, lead, text) {
+  const a = h('a', '', text);
+  a.href = BOOK.url; a.target = '_blank'; a.rel = 'sponsored noopener';
+  host.replaceChildren(document.createTextNode(lead), a, document.createTextNode(' (paid link)'));
+  host.hidden = false;
+}
+function renderBookLine() {
+  const el = $('#book-line');
+  if (!BOOK || !isToday()) { el.hidden = true; return; }
+  const live = [...S.games.values()].filter((g) => { if (g.state !== 'in') return false; const st = standing(g); return st && st.fresh && st.best && st.best.weight === 3; }).length;
+  if (!live) { el.hidden = true; return; }
+  bookLink(el, `${live === 1 ? 'One signal is' : `${live} signals are`} live right now. `, `Open ${BOOK.name}`);
+}
+function renderBookLink(g, st) {
+  const el = $('#book-link');
+  if (!BOOK || !g || g.state !== 'in' || !st || !st.fresh) { el.hidden = true; return; }
+  bookLink(el, '', `Open this game at ${BOOK.name}`);
+}
+
+function setupSite() {
+  document.title = SITE.name;
+  $('#wordmark').textContent = SITE.name;
+  $('#tagline').textContent = SITE.tagline;
+  const links = $('#foot-links'), source = safeLink(SITE.source);
+  if (source) { const a = h('a', '', 'Source, model and recorded data'); a.href = source; links.append(a); }
+  if (LIST) {
+    $('#signup-form').action = LIST;
+    $('#signup-email').name = SITE.newsletter.field || 'email';
+    $('#signup-pitch').textContent = SITE.newsletter.pitch;
+    $('#signup').hidden = false;
+  }
+  if (/^[a-f0-9]{16,64}$/i.test(SITE.analytics)) { // Cloudflare Web Analytics: counts visits, sets no cookie
+    const s = document.createElement('script');
+    s.defer = true; s.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+    s.setAttribute('data-cf-beacon', JSON.stringify({ token: SITE.analytics }));
+    document.head.append(s);
+  }
+}
+
+function renderAbout() {
+  const host = $('#about');
+  if (host.childElementCount) return;
+  const y = S.model ? S.model.yardstick : null, dev = y ? f1(y.total) : '1.2';
+  const p = (...parts) => { const e = h('p'); e.append(...parts.map((x) => (typeof x === 'string' ? document.createTextNode(x) : x))); return e; };
+  const link = (text, href, out) => { const a = h('a', '', text); a.href = href; if (out) { a.target = '_blank'; a.rel = 'noopener'; } return a; };
+  const row = (title, ...paras) => { const r = h('div', 'about-row'), body = h('div'); body.append(...paras); r.append(h('h2', '', title), body); return r; };
+  const counted = /^[a-f0-9]{16,64}$/i.test(SITE.analytics), mail = safeMail(SITE.contact);
+  const rows = h('div', 'about-rows');
+  rows.append(
+    row('The fair number',
+      p('Fair is the current score plus an estimate of the points still to come. The estimate was fitted on 16,086 Division I games from 2022–23 through December 2025, with a separate fit for every minute of the game. It uses the pregame total and spread, the score and the time left.'),
+      p('It knows nothing about injuries, foul trouble or who is on the floor.')),
+    row('What counts as a signal',
+      p(`One reading is mostly timing: a basket moves fair before the sportsbook reprices. So the gap is averaged over three minutes and measured in deviations, the usual size of that average on earlier slates, about ${dev} points for a game total.`),
+      p(`A signal is the first time the average sits ${RULES.buyDev} or more deviations out between minute ${RULES.firstMinute} and minute ${RULES.lastMinute}, at a price the model’s chance beats by ${Math.round(RULES.margin * 100)} points. Signals are off when the pregame spread is ${RULES.blowoutSpread} or more or the lead is ${RULES.blowoutLead} or more, because the fair number runs high in those games.`)),
+    row('The record',
+      p('Every signal is logged when it fires and settled on the final score, wins and losses alike. Nothing is taken out afterwards. Game totals are settled at the sportsbook’s live price. Team totals are implied from the live total and spread and priced at an estimated −115.'),
+      p('The record is short. It starts on November 18, 2026, and a few weeks of results prove very little. ', link('See the record', '#/record'), '.')),
+    row('What this is not',
+      p('It is not betting advice, and it does not predict that any bet will win. The sportsbook line is one book’s number as ESPN publishes it, and yours may show something else. The feeds behind the site are public and can lag, change or stop.')),
+    row('Keep it a game',
+      p('Betting is for adults of legal age where they live. Decide what you can afford to lose before the games start, and stop when you reach it.'),
+      p('If it has stopped being fun, call or text 1-800-GAMBLER at any hour, or visit the ', link('National Council on Problem Gambling', 'https://www.ncpgambling.org/', true), '.')),
+    row('Privacy',
+      p(`There are no accounts and no advertising trackers. Your browser keeps its own copy of the lines it has seen, on your device, so a reload does not lose them. ${counted ? 'Visits are counted without cookies and without anything that identifies you.' : 'Visits are not counted.'}`),
+      p(`Scores, lines and the record are fetched straight from ESPN and GitHub, which see your connection the way any site you visit does.${LIST ? ' If you join the email list, your address is held by the mailing service and used for that list only.' : ''}`)),
+    row('How the site is paid for',
+      p(BOOK ? `Links to ${BOOK.name} are paid referrals: the site receives a flat fee when a new customer opens an account through one. It is never paid a share of anyone’s losses, and no sportsbook sees or shapes the model, the signals or the record.` : 'The site carries no advertising and no paid links.')),
+  );
+  if (mail) rows.append(row('Contact', p('Questions and corrections: ', link(mail, `mailto:${mail}`), '.')));
+  host.append(
+    h('h1', 'headline', 'A second number for every live total.'),
+    h('p', 'standfirst', 'During a game the sportsbook posts a total and keeps moving it. This site works out its own from the score and the clock, sets the two side by side, and logs a signal when they sit far apart for long enough. Then it keeps score on itself.'),
+    rows,
+  );
+}
+
 /* ---------- loop ---------- */
 function renderPulse() {
   const p = $('#pulse'), live = [...S.games.values()].filter((g) => g.state === 'in').length;
@@ -600,7 +680,7 @@ function renderPulse() {
   const rec = S.recordedAt ? `, recorder ${Math.max(0, Math.round((Date.now() / 1000 - S.recordedAt) / 60))} min ago` : '';
   p.replaceChildren(h('b', '', isToday() ? `${live} live` : dayLabel(S.date)), document.createTextNode(`, scores ${age}s ago`), h('span', 'wide', rec));
 }
-function render() { S.memo.clear(); renderPulse(); if (S.view === 'board') renderBoard(); if (S.view === 'game') renderGame(); if (S.view === 'record') renderRecord(); }
+function render() { S.memo.clear(); renderPulse(); if (S.view === 'board') renderBoard(); if (S.view === 'game') renderGame(); if (S.view === 'record') renderRecord(); if (S.view === 'about') renderAbout(); }
 
 async function refresh(force) {
   if (S.busy && !force) return;
@@ -624,7 +704,7 @@ async function refresh(force) {
 }
 
 /* ---------- wiring ---------- */
-for (const b of document.querySelectorAll('.nav button')) b.addEventListener('click', () => go(b.dataset.view === 'board' ? boardHash(S.date) : b.dataset.view === 'record' ? '#/record' : S.sel ? gameHash(S.sel) : '#/game'));
+for (const b of document.querySelectorAll('.nav button')) b.addEventListener('click', () => go(b.dataset.view === 'board' ? boardHash(S.date) : b.dataset.view === 'record' ? '#/record' : b.dataset.view === 'about' ? '#/about' : S.sel ? gameHash(S.sel) : '#/game'));
 for (const b of document.querySelectorAll('#markets button')) b.addEventListener('click', () => go(gameHash(S.sel, b.dataset.market)));
 $('#prev').addEventListener('click', () => go(boardHash(shiftDay(S.date, -1))));
 $('#next-day').addEventListener('click', () => go(boardHash(shiftDay(S.date, 1))));
@@ -654,8 +734,9 @@ document.addEventListener('keydown', (e) => {
 });
 
 (async () => {
-  try { S.model = createModel(await getJSON('model.json?v=9')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  try { S.model = createModel(await getJSON('model.json?v=10')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
   window.cslBooted = true;
+  setupSite();
   await applyRoute();
   setInterval(() => { if (!document.hidden) refresh(); }, POLL_MS);
   setInterval(renderPulse, 5000);
