@@ -2,12 +2,12 @@
 // Every slot is off until its value is filled in, and a slot that is off draws nothing on the page.
 
 export const SITE = {
-  name: 'Cold Stretch Live',
+  name: 'The Price of Pace',
   tagline: 'College basketball live totals, measured against a fair number',
 
   // Address the recorder's files are served from, ending in a slash.
   // Empty: worked out from a github.io address, which is all a site without its own domain needs.
-  data: '',
+  data: 'https://raw.githubusercontent.com/alecmessino/cold-stretch-live/data/',
 
   // Public link to the code and recorded data. Empty: no link is shown.
   source: '',

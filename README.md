@@ -1,4 +1,4 @@
-# Cold Stretch Live
+# The Price of Pace
 
 A live board for one question about college basketball totals: **when a team goes cold, does the book's live number drop further than it should?**
 

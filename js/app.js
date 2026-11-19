@@ -1,11 +1,11 @@
-// Cold Stretch Live: state, polling, routing and rendering.
+// The Price of Pace: state, polling, routing and rendering.
 // Every local file is requested with the same ?v= release number, so a browser or CDN can never pair one release's
 // page with another's scripts. Bump it everywhere on release; tests/release.test.mjs fails if the numbers disagree.
 
-import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=10';
-import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=10';
-import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=10';
-import { SITE, dataBase, safeLink, safeMail } from './site.js?v=10';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=11';
+import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=11';
+import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=11';
+import { SITE, dataBase, safeLink, safeMail } from './site.js?v=11';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -734,7 +734,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 (async () => {
-  try { S.model = createModel(await getJSON('model.json?v=10')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  try { S.model = createModel(await getJSON('model.json?v=11')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
   window.cslBooted = true;
   setupSite();
   await applyRoute();
