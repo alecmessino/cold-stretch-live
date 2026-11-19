@@ -102,6 +102,14 @@ class Recording(unittest.TestCase):
         self.assertEqual(self.total(self.game(held, start=record.T1 + 0.5, every=20)), [])
         self.assertTrue(all(s['t'] >= record.T0 for s in record.signals_for(self.game(held, start=0, a0=0, h0=0, every=30))))
 
+    def test_the_quote_on_screen_must_still_carry_the_edge(self):
+        self.assertEqual(self.total(self.game([5, 5, 5, 0.2])), [], 'the average is far out, but the book has just closed the gap: nothing to buy')
+        s = self.total(self.game([5, 5, 5, 0.2, 5]))
+        self.assertEqual(len(s), 1, 'it fires on the next reading that still offers the gap')
+        self.assertEqual(s[0]['t'], 24.0)
+        f = record.fair(150, 0, 24, 34, 36)
+        self.assertEqual(s[0]['chance'], round(100 * (1 - record.cdf(-5 / f['sd_total']))), 'and the chance logged is the chance on that quote')
+
     def test_a_market_fires_once_a_game_unless_it_is_allowed_again_after_the_gap_closes(self):
         there_and_back = [4] * 6 + [0] * 6 + [4] * 6   # out, closed, out again
         once = self.total(self.game(there_and_back))

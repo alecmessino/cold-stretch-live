@@ -31,6 +31,8 @@ test('a finished slate leads with its record', () => {
   assert.equal(w.head, '77 signals on Wednesday: 40 won, 35 lost, 2 pushed.');
   assert.match(w.sub, /were 1\.4 points apart on average\.$/);
   assert.equal(say({ today: false, anyFinal: true, readings: 500 }).head, 'No signals on Wednesday.');
+  assert.match(say({ today: false, anyFinal: true, readings: 2646, afterFact: true, signals: { n: 77, open: 0, won: 42, lost: 32, pushed: 3 } }).sub, /scored after the fact, under a rule set later\.$/);
+  assert.doesNotMatch(w.sub, /after the fact/);
 });
 
 test('between sessions on the same day it says what is still to come', () => {

@@ -281,6 +281,12 @@ td.lost { color: var(--sub); }
 .about-row p + p { margin-top: 10px; }
 .about-row a { color: var(--ink); text-underline-offset: 2px; }
 
+/* Before any line is recorded: no empty figures or charts; the schedule comes straight after the headline */
+#view-board.no-lines .figures, #view-board.no-lines #trend-key, #view-board.no-lines .split > .panel { display: none; }
+#view-board.no-lines > .block:not(#feed-block) { order: 2; }
+#view-board.no-lines > #finals { order: 3; }
+#view-board.no-lines .split > #next { order: -1; }
+
 /* First visit: three lines on how to read the site */
 .primer { padding: 20px 24px; background: var(--panel); border: 1px solid var(--rule); border-left: 3px solid var(--ink); border-radius: 4px; }
 .primer-rows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 40px; }

@@ -12,6 +12,9 @@ export const RULES = Object.freeze({
   windowSec: 180, // seconds averaged
   carrySec: 420, // the reading just before the window is carried forward if it is no older than this
   averageFrom: 2, // readings from this minute on feed the average
+  // The slate the current rule took effect on. Earlier slates are scored again under it after the fact, so the record
+  // shows them apart from signals scored live. Move this date whenever the signal itself changes.
+  ruleSince: '20261119',
   firstMinute: 4, // signals only between these elapsed minutes
   lastMinute: 38,
   blowoutLead: 15, // no signals at or beyond this lead
@@ -194,8 +197,9 @@ export function createModel(json) {
         if (!ready) return;
         m.avgEdge = use.reduce((sum, x) => sum + x.e[i], 0) / use.length;
         m.avgDev = m.avgEdge / m.sigma;
+        // The average decides whether there is a signal and on which side. The chance stays the one judge() worked out
+        // on this reading's own gap, because the line and price shown are the ones on screen now.
         m.side = m.avgEdge >= 0 ? 'Over' : 'Under';
-        m.over = 1 - cdf(-m.avgEdge / m.sd);
         m.chance = m.side === 'Over' ? m.over : 1 - m.over;
         const quoted = k === 'total' ? (m.side === 'Over' ? r[6] : r[7]) : null;
         m.price = quoted == null ? -115 : quoted;

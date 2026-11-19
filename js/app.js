@@ -2,11 +2,11 @@
 // Every local file is requested with the same ?v= release number, so a browser or CDN can never pair one release's
 // page with another's scripts. Bump it everywhere on release; tests/release.test.mjs fails if the numbers disagree.
 
-import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=15';
-import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=15';
-import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=15';
-import { SITE, dataBase, safeLink, safeMail } from './site.js?v=15';
-import { boardWords } from './words.js?v=15';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=16';
+import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=16';
+import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=16';
+import { SITE, dataBase, safeLink, safeMail } from './site.js?v=16';
+import { boardWords } from './words.js?v=16';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -341,9 +341,10 @@ function renderLead(all) {
   const { head, sub } = boardWords({
     loaded: !!S.scoresAt, today: isToday(), weekday: new Date(toUTC(S.date)).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }),
     games: all.length, live, ahead: ahead.length, nextTip: ahead.length ? timeLabel(ahead[0].start) : '', anyFinal: all.some((g) => g.state === 'post'),
-    readings: st.n, apart: st.abs || 0, firstMinute: RULES.firstMinute,
+    readings: st.n, apart: st.abs || 0, firstMinute: RULES.firstMinute, afterFact: S.date < RULES.ruleSince,
     signals: { n: sig.length, open: count('Pending'), won: count('Won'), lost: count('Lost'), pushed: count('Push') },
   });
+  $('#view-board').classList.toggle('no-lines', !st.n); // before any line is recorded the schedule leads and the empty figures step aside
   $('#lead-head').textContent = head;
   $('#lead-sub').textContent = sub; $('#lead-sub').hidden = !sub;
   $('#fig-abs').textContent = st.n ? st.abs.toFixed(1) : '–';
@@ -595,16 +596,33 @@ const IDEA_LABELS = {
 function renderRecord() {
   const L = S.ledger.slice().sort((a, b) => b.ts - a.ts);
   const tally = (rows) => { const w = rows.filter((s) => s.result === 'Won').length, l = rows.filter((s) => s.result === 'Lost').length; return w + l ? `${w}–${l}` : '–'; };
-  const settled = L.filter((s) => s.result === 'Won' || s.result === 'Lost');
-  const units = settled.reduce((u, s) => u + (s.result === 'Won' ? (s.price > 0 ? s.price / 100 : 100 / -s.price) : -1), 0);
-  const won = settled.filter((s) => s.result === 'Won').length, pushed = L.filter((s) => s.result === 'Push').length, open = L.length - settled.length - pushed;
-  $('#rec-head').textContent = !L.length ? 'No signal has fired yet.' : `${L.length} signal${L.length === 1 ? '' : 's'} so far in ${new Set(L.map((s) => s.game)).size} game${new Set(L.map((s) => s.game)).size === 1 ? '' : 's'}: ${won} won, ${settled.length - won} lost${pushed ? `, ${pushed} pushed` : ''}${open ? `, ${open} still open` : ''}.`;
-  document.querySelector('.sums').hidden = !L.length;
-  $('#r-all').textContent = tally(L);
+  const pay = (s) => (s.result === 'Won' ? (s.price > 0 ? s.price / 100 : 100 / -s.price) : s.result === 'Lost' ? -1 : 0);
+  // Signals scored as they happened under the current rule are the record. Slates from before the rule was last
+  // changed are scored again under it after the fact, and are shown apart.
+  const live = L.filter((s) => s.date >= RULES.ruleSince), back = L.filter((s) => s.date < RULES.ruleSince);
+  const settled = live.filter((s) => s.result === 'Won' || s.result === 'Lost'), units = settled.reduce((u, s) => u + pay(s), 0);
+  const won = settled.filter((s) => s.result === 'Won').length, pushed = live.filter((s) => s.result === 'Push').length, open = live.length - settled.length - pushed;
+  const since = new Date(toUTC(RULES.ruleSince)).toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' }), games = new Set(live.map((s) => s.game)).size;
+  $('#rec-head').textContent = live.length ? `${live.length} signal${live.length === 1 ? '' : 's'} in ${games} game${games === 1 ? '' : 's'} since ${since}: ${won} won, ${settled.length - won} lost${pushed ? `, ${pushed} pushed` : ''}${open ? `, ${open} still open` : ''}.`
+    : back.length ? `No signal has been scored live under the current rule yet. It took effect on ${since}.` : 'No signal has fired yet.';
+  document.querySelector('.sums').hidden = !live.length;
+  $('#r-all').textContent = tally(live);
   $('#r-units').textContent = settled.length ? signed(units) : '–';
   $('#r-units').className = settled.length && units > 0 ? 'is-over' : settled.length && units < 0 ? 'is-under' : '';
-  $('#r-over').textContent = tally(L.filter((s) => s.side === 'Over'));
-  $('#r-under').textContent = tally(L.filter((s) => s.side === 'Under'));
+  $('#r-over').textContent = tally(live.filter((s) => s.side === 'Over'));
+  $('#r-under').textContent = tally(live.filter((s) => s.side === 'Under'));
+  const splitRow = (label, rows) => {
+    const w = rows.filter((s) => s.result === 'Won').length, l = rows.filter((s) => s.result === 'Lost').length, tr = document.createElement('tr');
+    const pending = rows.filter((s) => s.result !== 'Won' && s.result !== 'Lost' && s.result !== 'Push').length;
+    for (const [v, c] of [[label], [rows.length, 'r'], [w + l ? `${w}–${l}` : '–', 'r'], [w + l ? `${Math.round((100 * w) / (w + l))}%` : '–', 'r'], [w + l ? signed(rows.reduce((u, s) => u + pay(s), 0)) : '–', 'r'], [pending || '', 'r']]) tr.append(h('td', c || '', v));
+    return tr;
+  };
+  const isTotal = (s) => (s.mkt || '') === 'total' || s.market === 'Game total';
+  const groups = [['Game totals at the quoted price, scored live', live.filter(isTotal)], ['Team totals at an estimated price, scored live', live.filter((s) => !isTotal(s))],
+    ['Game totals, scored after the fact', back.filter(isTotal)], ['Team totals, scored after the fact', back.filter((s) => !isTotal(s))]].filter(([, rows]) => rows.length);
+  $('#split-rows').replaceChildren(...groups.map(([label, rows]) => splitRow(label, rows)));
+  $('#split-block').hidden = !groups.length;
+  $('#split-note').textContent = `Game totals are settled at the price the sportsbook was quoting. Team totals are implied from the live total and spread and priced at an estimated −115, so they are the weaker claim. The rule was last changed on ${since}.${back.length ? ' Slates before that were scored again under it after the fact: they show what the rule would have done, and are not a test of it.' : ''}`;
   $('#days-rows').replaceChildren(...S.index.slice().reverse().map((d) => {
     const tr = document.createElement('tr'); tr.tabIndex = 0;
     for (const [v, c] of [[dayLabel(d.date)], [d.games, 'r'], [d.total_readings == null ? d.readings : d.total_readings, 'r'], [d.gap_abs == null ? '–' : d.gap_abs.toFixed(1), 'r'], [d.dev_low == null ? '–' : `${d.dev_low}%`, 'r'], [d.dev_high == null ? '–' : `${d.dev_high}%`, 'r']]) tr.append(h('td', c || '', v));
@@ -840,7 +858,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 (async () => {
-  try { S.model = createModel(await getJSON('model.json?v=15')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  try { S.model = createModel(await getJSON('model.json?v=16')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
   window.cslBooted = true;
   setupSite();
   await applyRoute();

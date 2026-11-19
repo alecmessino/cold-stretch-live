@@ -23,7 +23,7 @@
 <meta name="apple-mobile-web-app-title" content="Price of Pace">
 <link rel="preload" href="fonts/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/app.css?v=15">
+<link rel="stylesheet" href="css/app.css?v=16">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -208,16 +208,27 @@
     <div class="lead">
       <div class="lead-say">
         <h1 class="headline" id="rec-head">The record.</h1>
-        <p class="standfirst">Every signal the recorder has logged, settled against the final score. A signal is the first time the three-minute rolling average of fair minus book sits 2 or more deviations from zero, at a price the chance still beats by five points. Minutes 4 to 38 only, and never with a pregame spread of 20 or a lead of 15. A game total and the two team totals in one game are the same view counted up to three times, so read the record by game as well as by signal. November 17 was scored after this rule was chosen, so it is a backfill and not a test. The forward record starts November 18.</p>
+        <p class="standfirst">Every signal the recorder has logged, settled against the final score. A signal is the first time the three-minute rolling average of fair minus book sits 2 or more deviations from zero, at a price the chance still beats by five points. Minutes 4 to 38 only, and never with a pregame spread of 20 or a lead of 15. A game total and the two team totals in one game are the same view counted up to three times, so read the record by game as well as by signal. The chance is worked out on the quote on screen when the signal fires.</p>
         <p class="share-row"><button type="button" class="key" data-share="record">Share the record</button></p>
       </div>
     </div>
     <dl class="sums">
-      <div><dt>Won–lost</dt><dd id="r-all">–</dd></div>
+      <div><dt>Won–lost, scored live</dt><dd id="r-all">–</dd></div>
       <div><dt>Units, 1 risked per signal</dt><dd id="r-units">–</dd></div>
       <div><dt>Overs: book under fair</dt><dd id="r-over">–</dd></div>
       <div><dt>Unders: book over fair</dt><dd id="r-under">–</dd></div>
     </dl>
+
+    <div class="block" id="split-block" hidden>
+      <h2>The record by market, and by how it was scored</h2>
+      <p class="note" id="split-note"></p>
+      <div class="sheet">
+        <table class="first-wraps drop-46">
+          <thead><tr><th>Market</th><th class="r">Signals</th><th class="r">Won–lost</th><th class="r">Win rate</th><th class="r">Units</th><th class="r">Open</th></tr></thead>
+          <tbody id="split-rows"></tbody>
+        </table>
+      </div>
+    </div>
 
     <div class="block">
       <h2>How close the book runs to fair</h2>
@@ -319,7 +330,7 @@
 </footer>
 
 <script src="vendor/d3.v7.9.2.min.js"></script>
-<script type="module" src="js/app.js?v=15"></script>
+<script type="module" src="js/app.js?v=16"></script>
 <script>
   // If the app has not started after ten seconds, say so instead of sitting on "Loading".
   setTimeout(function () {

@@ -4,7 +4,7 @@ const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const settled = (s) => `${s.won} won, ${s.lost} lost${s.pushed ? `, ${s.pushed} pushed` : ''}`;
 
 /**
- * d: { loaded, today, weekday, games, live, ahead, nextTip, anyFinal, readings, apart, firstMinute,
+ * d: { loaded, today, weekday, games, live, ahead, nextTip, anyFinal, readings, apart, firstMinute, afterFact,
  *      signals: { n, open, won, lost, pushed } }
  * The headline says what there is to act on; the standfirst says what a signal is and how close the two numbers ran.
  */
@@ -30,5 +30,6 @@ export function boardWords(d) {
   const head = s.n ? `${plural(s.n, 'signal')} ${when}: ${settled(s)}${s.open ? `, ${s.open} open` : ''}.` : `No signals ${when}.`;
   const what = 'A signal is logged when the sportsbook’s live total sits well away from the fair number for three minutes, at a price that pays.';
   const next = d.today && d.ahead ? ` ${d.ahead === 1 ? 'One game is' : `${d.ahead} games are`} still to tip; the next is at ${d.nextTip}.` : '';
-  return { head, sub: `${what} ${apart.replace('have been', d.today ? 'have been' : 'were')}${next}` };
+  const scored = d.afterFact && s.n ? ' This slate was scored after the fact, under a rule set later.' : '';
+  return { head, sub: `${what} ${apart.replace('have been', d.today ? 'have been' : 'were')}${next}${scored}` };
 }

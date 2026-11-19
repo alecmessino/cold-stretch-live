@@ -122,6 +122,16 @@ test('no signals in blowouts, on huge spreads, or outside the window', () => {
   assert.ok(early.every((s) => s.minute >= RULES.firstMinute), 'nothing before the first minute');
 });
 
+test('the quote on screen must still carry the edge', () => {
+  assert.equal(totals(steady([5, 5, 5, 0.2])).length, 0, 'the average is far out, but the book has just closed the gap: nothing to buy');
+  const s = totals(steady([5, 5, 5, 0.2, 5]));
+  assert.equal(s.length, 1, 'it fires on the next reading that still offers the gap');
+  assert.equal(s[0].minute, 24);
+  const row = model.track([150, 0], steady([5, 5, 5, 0.2, 5]))[4].markets.total;
+  close(s[0].chance, row.over, 'and the chance logged is the chance on that quote');
+  assert.ok(row.avgEdge < row.edge, 'the average and the gap on the quote are different numbers');
+});
+
 test('lopsided spots are judged apart: off in the record, on in the comparison', () => {
   const held = [4, 4, 4, 4, 4, 4];
   const shadow = (opts, pre = [150, 0]) => model.signalsFor(pre, steady(held, { ...opts, pre }), null, { lopsided: true }).filter((s) => s.market === 'total');

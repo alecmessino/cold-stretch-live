@@ -64,6 +64,8 @@ The recorder stores the yardstick with each day and re-estimates it from complet
 
 Lopsided spots (a 20-point pregame spread, a 15-point lead) are left out of the signal, the yardstick and the daily summary. Across 971 games with a 20-point spread in three seasons the fair number ran about a point high (final 1.35 under fair at halftime, standard error 0.34), against 0.1 in other games. The same rule is still run on those spots as a tenth row of the ladder (`lopsided`) and shown on the game page beside the signals, so the exclusion can be judged on results. On the trend charts those stretches are filled grey.
 
+The average decides whether there is a signal and on which side; the chance is worked out on the reading's own gap, so the line and price logged are ones that still carry the edge when the signal fires. `RULES.ruleSince` in `js/model.js` is the slate the current rule took effect on: the Record page shows signals scored live from that date apart from earlier slates scored again after the fact, and splits both by market, because team-total prices are estimates.
+
 Ideas under test (`IDEAS` in the recorder) are the signal with one thing changed: game totals only, team totals only, stopping at minute 34, firing again after the gap closes, and the original cold-stretch buy (the over when scoring is well behind pace), in ordinary and in lopsided games. They get their own table on the Record page and are never part of the record.
 
 A reading taken at the end of regulation is dropped by the app: if the game is tied it already carries the overtime line.

@@ -35,7 +35,7 @@ IDEAS = (('signal-totals', {}, lambda s: s['mkt'] == 'total'),             # gam
          ('cold-over', {}, lambda s: s['spot'] == 'Cold spot'),            # the original thesis: the over when scoring is well behind pace
          ('cold-over-lopsided', {'lopsided': True}, lambda s: s['spot'] == 'Cold spot'))
 STAGES = (('all', 0, 41), ('4 to 20', 0, 20), ('20 to 34', 20, 34), ('34 to 38', 34, 41))
-RULES_VERSION = '2026-11-19.1'   # change this whenever a rule, window or variant changes: the recorder then re-judges every stored slate when it next starts
+RULES_VERSION = '2026-11-19.2'   # change this whenever a rule, window or variant changes: the recorder then re-judges every stored slate when it next starts
 MODEL = json.load(open(os.path.join(ROOT, 'model.json')))
 ROWS = {r['minute']: r for r in MODEL['rows']}; CDF = MODEL['cdf']; YARD = {k: MODEL['yardstick'][k] for k in ('total', 'team')}
 
@@ -139,7 +139,10 @@ def signals_for(g, yard=None, k=BUY_DEV, window=WINDOW, arm=None, lopsided=False
               ('away', g['away'] + ' team total', f['fa'], bt / 2 + bs / 2, f['sd_team'], yard['team'], f['ashort'] >= 3, None, None, None if not fin else fin[0]),
               ('home', g['home'] + ' team total', f['fh'], bt / 2 - bs / 2, f['sd_team'], yard['team'], f['hshort'] >= 3, None, None, None if not fin else fin[1])]
         for i, (key, market, fv, line, sd_rest, y, cold, o_price, u_price, final) in enumerate(mk):
-            gap = r['avg'][i]; sigma = y; dev = gap / sigma; p_over = 1 - cdf(-gap / sd_rest)
+            # The averaged gap decides whether there is a signal and on which side. The chance is worked out on this
+            # reading's own gap, because the line and price being logged are the ones on screen now: a three-minute
+            # disagreement the book has just closed is not a bet.
+            gap = r['avg'][i]; sigma = y; dev = gap / sigma; p_over = 1 - cdf(-r['gaps'][i] / sd_rest)
             side, p, price = ('Over', p_over, o_price) if gap >= 0 else ('Under', 1 - p_over, u_price)
             paid = price if price is not None else -115; size = abs(dev)
             if again is not None:   # the gap has closed, or flipped: this market can be bought again
