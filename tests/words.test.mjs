@@ -1,7 +1,7 @@
 // The board's headline in every state of a slate.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boardWords } from '../js/words.js';
+import { boardWords, signalWords, agoWords } from '../js/words.js';
 
 const base = { loaded: true, today: true, weekday: 'Wednesday', games: 60, live: 0, ahead: 0, nextTip: '6:00 PM', anyFinal: false, readings: 0, apart: 1.4, firstMinute: 4, signals: { n: 0, open: 0, won: 0, lost: 0, pushed: 0 } };
 const say = (over) => boardWords({ ...base, ...over });
@@ -44,4 +44,23 @@ test('between sessions on the same day it says what is still to come', () => {
 test('lines not yet recorded while games are live, or never recorded', () => {
   assert.equal(say({ live: 3 }).head, '3 games in progress. The first lines are coming in.');
   assert.equal(say({ today: false, anyFinal: true }).head, 'No live lines were recorded for this slate.');
+});
+
+test('an open signal says whether it can still be bet', () => {
+  const lim = { lastMinute: 38, lead: 15 }, say2 = (now) => signalWords(now, lim);
+  assert.deepEqual(say2({ state: 'on', line: 147.5, price: -118, quoted: true, moved: false }), { text: 'Still on at 147.5 (−118)', on: true });
+  assert.equal(say2({ state: 'on', line: 146.5, price: 105, quoted: true, moved: true }).text, 'Still on, line now 146.5 (+105)');
+  assert.equal(say2({ state: 'on', line: 71, price: -115, quoted: false, moved: false }).text, 'Still on at 71.0', 'an estimated price is not shown as a quote');
+  assert.deepEqual(say2({ state: 'gone', line: 144.5, moved: true }), { text: 'Line now 144.5, edge gone', on: false });
+  assert.equal(say2({ state: 'gone', line: 147.5, moved: false }).text, 'Edge gone at 147.5');
+  assert.equal(say2({ state: 'off', why: 'late' }).text, 'Past minute 38, where signals stop');
+  assert.equal(say2({ state: 'off', why: 'lopsided' }).text, 'Lead of 15 or more, where signals are off');
+  assert.equal(say2({ state: 'none' }).on, false);
+  assert.equal(say2(null).text, 'No live line right now');
+});
+
+test('how long ago a signal fired', () => {
+  assert.equal(agoWords(20), 'just now');
+  assert.equal(agoWords(150), '2 min ago');
+  assert.equal(agoWords(4000), '');
 });

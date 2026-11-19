@@ -1,3 +1,4 @@
 _store/
 __pycache__/
 *.pyc
+_sim/

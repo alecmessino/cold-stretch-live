@@ -68,6 +68,8 @@ The average decides whether there is a signal and on which side; the chance is w
 
 Ideas under test (`IDEAS` in the recorder) are the signal with one thing changed: game totals only, team totals only, stopping at minute 34, firing again after the gap closes, and the original cold-stretch buy (the over when scoring is well behind pace), in ordinary and in lopsided games. They get their own table on the Record page and are never part of the record.
 
+While a signal is open the site says whether it can still be bet: `signalNow` in `js/model.js` puts the signal's side through the same price test on the line showing now ("still on", or "edge gone" once the line or the game has moved). It reads "New" for three minutes after it fires, and the browser tab carries the number of open signals.
+
 A reading taken at the end of regulation is dropped by the app: if the game is tied it already carries the overtime line.
 
 Game totals are settled at DraftKings' live price. Team totals are implied from the live total and spread, (total ± spread) / 2, and priced at an estimated -115, because the feed carries no posted team-total market.

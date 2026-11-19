@@ -202,6 +202,11 @@ h2 { font: 600 23px/1.2 var(--serif); letter-spacing: -0.005em; }
 .feed .when.is-open { color: var(--ink); }
 .feed .who { display: grid; gap: 1px; }
 .feed-sub { color: var(--sub); font-size: 14px; }
+/* an open signal against the line showing now */
+.feed-now { color: var(--sub); font-size: 14px; }
+.feed-now.is-on { color: var(--ink); font-weight: 600; }
+.sched .feed-all { display: block; color: var(--sub); font-size: 14px; font-weight: 500; }
+.sched .feed-all:hover { color: var(--ink); }
 .m-sub { display: none; }
 .hist svg, .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .hist text, .chart text { font: 500 12px var(--sans); fill: var(--sub); }
@@ -249,6 +254,7 @@ h2 { font: 600 23px/1.2 var(--serif); letter-spacing: -0.005em; }
 .scrub .v-fair { color: var(--fair); }
 .chart { touch-action: pan-y; }
 .chart .lbl { font-size: 13px; font-weight: 700; }
+.chart .sig { font-size: 12px; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; stroke-linejoin: round; }
 .chart .ttl { font-size: 13px; font-weight: 600; fill: var(--ink); }
 .chart .vacant { border: 0; padding: 36px 0; }
 
@@ -367,6 +373,9 @@ td.lost { color: var(--sub); }
   .figures dt { margin-top: 4px; font-size: 13px; line-height: 1.3; }
   .figures .full, .figures .fig-count { display: none; }
   .figures .brief { display: inline; }
+  .sums { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 14px; }
+  .sums > div { padding: 11px 0; }
+  .sums dd { font-size: 24px; }
   .first-wraps.is-days td:first-child, .first-wraps.is-days th:first-child { min-width: 0; white-space: nowrap; }
   .first-wraps.is-days :is(th, td):nth-child(2) { display: none; }
   .seg button { padding: 0 12px; }

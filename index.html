@@ -23,7 +23,7 @@
 <meta name="apple-mobile-web-app-title" content="Price of Pace">
 <link rel="preload" href="fonts/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/app.css?v=17">
+<link rel="stylesheet" href="css/app.css?v=18">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -153,6 +153,7 @@
         <div class="mid"><span class="pts" id="pts-away">–</span><span class="clk" id="clock"></span><span class="pts" id="pts-home">–</span></div>
         <div class="side is-home" id="side-home"></div>
       </div>
+      <div class="sched feed" id="game-feed" aria-label="Signals in this game" hidden></div>
       <div class="markets" id="markets" role="group" aria-label="Market">
         <button type="button" data-market="total" aria-pressed="true">Game total</button>
         <button type="button" data-market="away" aria-pressed="false" id="mk-away">Away</button>
@@ -184,8 +185,8 @@
         <div class="wall is-three" id="mk-wall"></div>
       </div>
 
-      <div class="block">
-        <h2>Signals in this game</h2>
+      <div class="block" id="sig-block">
+        <h2>Signals in this game, in full</h2>
         <div class="sheet" id="sig-sheet">
           <table>
             <thead><tr><th>Market</th><th>Side</th><th>Clock</th><th>Score</th><th class="r">Line</th><th class="r">Fair</th><th class="r">Deviations</th><th class="r">Chance</th><th class="r">Final</th><th>Result</th></tr></thead>
@@ -218,6 +219,12 @@
       <div><dt>Overs: book under fair</dt><dd id="r-over">–</dd></div>
       <div><dt>Unders: book over fair</dt><dd id="r-under">–</dd></div>
     </dl>
+
+    <div class="block" id="units-block" hidden>
+      <h2>Units won or lost, signal by signal</h2>
+      <p class="note">One unit risked on every signal scored live, at the price logged with it, in the order they fired. The thin line is game totals alone, the only signals settled at a quoted price.</p>
+      <div class="panel chart-panel"><div class="chart" id="units"></div></div>
+    </div>
 
     <div class="block" id="split-block" hidden>
       <h2>The record by market, and by how it was scored</h2>
@@ -345,7 +352,7 @@
 </footer>
 
 <script src="vendor/d3.v7.9.2.min.js"></script>
-<script type="module" src="js/app.js?v=17"></script>
+<script type="module" src="js/app.js?v=18"></script>
 <script>
   // If the app has not started after ten seconds, say so instead of sitting on "Loading".
   setTimeout(function () {

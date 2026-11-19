@@ -33,3 +33,24 @@ export function boardWords(d) {
   const scored = d.afterFact && s.n ? ' This slate was scored after the fact, under a rule set later.' : '';
   return { head, sub: `${what} ${apart.replace('have been', d.today ? 'have been' : 'were')}${next}${scored}` };
 }
+
+const price = (p) => `${p > 0 ? '+' : '−'}${Math.abs(p)}`;
+
+/**
+ * An open signal against the quote showing now, in a few words. `now` is model.signalNow()'s answer;
+ * limits: { lastMinute, lead } from the rules. Returns { text, on }: `on` is true only while the bet can still be made.
+ */
+export function signalWords(now, limits) {
+  if (!now || now.state === 'none') return { text: 'No live line right now', on: false };
+  if (now.state === 'off') return { text: now.why === 'late' ? `Past minute ${limits.lastMinute}, where signals stop` : `Lead of ${limits.lead} or more, where signals are off`, on: false };
+  const line = now.line.toFixed(1);
+  if (now.state === 'on') { const at = `${line}${now.quoted ? ` (${price(now.price)})` : ''}`; return { text: now.moved ? `Still on, line now ${at}` : `Still on at ${at}`, on: true }; }
+  return { text: now.moved ? `Line now ${line}, edge gone` : `Edge gone at ${line}`, on: false };
+}
+
+/** How long ago a signal fired, for the minutes it is fresh. */
+export function agoWords(seconds) {
+  if (seconds < 60) return 'just now';
+  const m = Math.floor(seconds / 60);
+  return m < 60 ? `${m} min ago` : '';
+}

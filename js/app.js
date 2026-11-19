@@ -2,11 +2,11 @@
 // Every local file is requested with the same ?v= release number, so a browser or CDN can never pair one release's
 // page with another's scripts. Bump it everywhere on release; tests/release.test.mjs fails if the numbers disagree.
 
-import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=17';
-import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=17';
-import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=17';
-import { SITE, dataBase, safeLink, safeMail } from './site.js?v=17';
-import { boardWords } from './words.js?v=17';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats, signalNow } from './model.js?v=18';
+import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=18';
+import { rangePlot, histogram, trendPanel, gameChart, unitsChart, fmt } from './charts.js?v=18';
+import { SITE, dataBase, safeLink, safeMail } from './site.js?v=18';
+import { boardWords, signalWords, agoWords } from './words.js?v=18';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -369,30 +369,50 @@ function renderHistogram(gaps) {
   S.histKey = key;
 }
 
-const DONE_SHOWN = 8, FEED_SHOWN = 6, LEDGER_SHOWN = 20;
+const DONE_SHOWN = 8, FEED_SHOWN = 6, GAME_FEED_SHOWN = 3, LEDGER_SHOWN = 20, UNITS_FROM = 10; // the units chart waits for ten settled signals
 const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+/** The latest reading of a live game with a fresh line, or null. An open signal is checked against it. */
+function nowRow(g) {
+  if (g.state !== 'in' || g.period > 2 || !g.live || Date.now() - g.live.at >= RULES.staleMs) return null;
+  const rows = tracked(g), row = rows[rows.length - 1];
+  return row && Math.abs(row.t - g.minute) < 1.5 ? row : null;
+}
+
+const NEW_SEC = 180; // a signal reads "New" for this long after it fires
+const openFirst = (a, b) => (a.s.result === 'Pending' ? 0 : 1) - (b.s.result === 'Pending' ? 0 : 1) || b.s.at - a.s.at;
+
+/**
+ * One signal as a row: its result, what was bought and where, and how it ended. While it is open in a live game the
+ * row also says whether the bet can still be made on the line showing now. withGame names the matchup (the board's list).
+ */
+function signalRow(g, s, withGame) {
+  const b = h('button'); b.type = 'button';
+  const name = s.market === 'total' ? 'Game total' : `${(s.market === 'away' ? g.away : g.home).name} total`;
+  const open = s.result === 'Pending', live = open && g.state === 'in' && isToday(), age = Date.now() / 1000 - s.at;
+  const ago = live ? agoWords(age) : '';
+  const who = h('span', 'who');
+  who.append(h('span', '', `${name}, ${s.side.toLowerCase()} ${f1(s.line)}`),
+    h('span', 'feed-sub', `${withGame ? `${g.away.name} at ${g.home.name}, ` : ''}${clockLabel(s.minute)}${withGame ? '' : `, score ${s.score}`}${ago ? `, ${ago}` : ''}`));
+  if (live) { const w = signalWords(signalNow(s, nowRow(g)), { lastMinute: RULES.lastMinute, lead: RULES.blowoutLead }); who.append(h('span', `feed-now${w.on ? ' is-on' : ''}`, w.text)); }
+  const res = !open ? s.result : live && age < NEW_SEC ? 'New' : 'Open';
+  b.append(h('span', `when ${s.result === 'Won' ? 'won' : s.result === 'Lost' ? 'lost' : open ? 'is-open' : ''}`, res), who, h('span', 'what', s.final == null ? `fair ${f1(s.fair)}` : `final ${s.final}`));
+  b.addEventListener('click', () => go(gameHash(g.id, s.market)));
+  return b;
+}
 
 /** Every signal on the slate in one list: open ones first, then the newest. The quickest read of what there is to act on. */
 function renderFeed(all) {
   const rows = [];
   for (const g of all) for (const s of signalsOf(g)) rows.push({ g, s });
-  rows.sort((a, b) => (a.s.result === 'Pending' ? 0 : 1) - (b.s.result === 'Pending' ? 0 : 1) || b.s.at - a.s.at);
+  rows.sort(openFirst);
   const block = $('#feed-block'), open = rows.filter((r) => r.s.result === 'Pending').length;
   block.hidden = !rows.length || S.only;
   if (block.hidden) return;
   const won = rows.filter((r) => r.s.result === 'Won').length, lost = rows.filter((r) => r.s.result === 'Lost').length;
   $('#feed-h').textContent = open ? 'Signals, open ones first' : 'Signals, newest first'; // the headline carries the count and the record
   const shown = S.allFeed ? rows : rows.slice(0, Math.max(FEED_SHOWN, open));
-  $('#feed').replaceChildren(...shown.map(({ g, s }) => {
-    const b = h('button'); b.type = 'button';
-    const name = s.market === 'total' ? 'Game total' : `${(s.market === 'away' ? g.away : g.home).name} total`;
-    const who = h('span', 'who');
-    who.append(h('span', '', `${name}, ${s.side.toLowerCase()} ${f1(s.line)}`), h('span', 'feed-sub', `${g.away.name} at ${g.home.name}, ${clockLabel(s.minute)}`));
-    const res = s.result === 'Pending' ? 'Open' : s.result;
-    b.append(h('span', `when ${s.result === 'Won' ? 'won' : s.result === 'Lost' ? 'lost' : s.result === 'Pending' ? 'is-open' : ''}`, res), who, h('span', 'what', s.final == null ? `fair ${f1(s.fair)}` : `final ${s.final}`));
-    b.addEventListener('click', () => go(gameHash(g.id, s.market)));
-    return b;
-  }));
+  $('#feed').replaceChildren(...shown.map(({ g, s }) => signalRow(g, s, true)));
   const moreBtn = $('#feed-more');
   moreBtn.hidden = shown.length === rows.length;
   moreBtn.textContent = `Show all ${rows.length} signals`;
@@ -488,6 +508,16 @@ function renderGame() {
   $('#lg-away').textContent = g.away.name; $('#lg-home').textContent = g.home.name;
   const [text, cls] = sentence(g, st, k, book);
   $('#read').textContent = text; $('#read').className = `read ${cls}`;
+  // The signals lead the page: what fired, where, and for an open one whether it can still be bet.
+  const lead = signalsOf(g).map((s) => ({ g, s })).sort(openFirst);
+  const top = lead.slice(0, Math.max(GAME_FEED_SHOWN, lead.filter((x) => x.s.result === 'Pending').length)); // every open one, then the newest
+  $('#game-feed').replaceChildren(...top.map(({ s }) => signalRow(g, s, false)));
+  if (top.length < lead.length) {
+    const more = h('button', 'feed-all', `All ${lead.length} signals in this game, in full`); more.type = 'button';
+    more.addEventListener('click', () => $('#sig-block').scrollIntoView({ block: 'start' }));
+    $('#game-feed').append(more);
+  }
+  $('#game-feed').hidden = !lead.length;
   renderBookLink(g, st);
 
   const m = st ? st.markets[k] : null;
@@ -614,6 +644,12 @@ function renderRecord() {
   $('#r-units').className = settled.length && units > 0 ? 'is-over' : settled.length && units < 0 ? 'is-under' : '';
   $('#r-over').textContent = tally(live.filter((s) => s.side === 'Over'));
   $('#r-under').textContent = tally(live.filter((s) => s.side === 'Under'));
+  // Units signal by signal, in the order they fired: every live-scored signal, and game totals alone beside it.
+  const run = live.filter((s) => s.result === 'Won' || s.result === 'Lost' || s.result === 'Push').sort((a, b) => a.ts - b.ts);
+  let all = 0, tot = 0;
+  const steps = run.map((s) => { all += pay(s); if ((s.mkt || '') === 'total' || s.market === 'Game total') tot += pay(s); return { all, totals: tot, date: s.date }; });
+  $('#units-block').hidden = steps.length < UNITS_FROM;
+  if (steps.length >= UNITS_FROM) unitsChart($('#units'), steps, { dayLabel: (d) => dayLabel(d).split(', ').pop() });
   const splitRow = (label, rows) => {
     const w = rows.filter((s) => s.result === 'Won').length, l = rows.filter((s) => s.result === 'Lost').length, tr = document.createElement('tr');
     const pending = rows.filter((s) => s.result !== 'Won' && s.result !== 'Lost' && s.result !== 'Push').length;
@@ -816,7 +852,13 @@ function renderPulse() {
   const rec = mins == null || !isToday() || !live ? '' : mins > 12 ? `, recorder last saved ${mins} min ago` : `, recorder ${mins} min ago`;
   p.replaceChildren(h('b', '', isToday() ? `${live} live` : dayLabel(S.date)), document.createTextNode(`, scores ${age}s ago`), h('span', 'wide', rec));
 }
-function render() { S.memo.clear(); renderPulse(); if (S.view === 'board') renderBoard(); if (S.view === 'game') renderGame(); if (S.view === 'record') renderRecord(); if (S.view === 'about') renderAbout(); }
+/** The browser tab carries the number of open signals, so a tab left in the background still says when one fires. */
+function renderTitle() {
+  const open = isToday() ? [...S.games.values()].filter((g) => g.state === 'in').reduce((n, g) => n + signalsOf(g).filter((s) => s.result === 'Pending').length, 0) : 0;
+  const title = open ? `(${open}) ${SITE.name}` : SITE.name;
+  if (document.title !== title) document.title = title;
+}
+function render() { S.memo.clear(); renderPulse(); if (S.view === 'board') renderBoard(); if (S.view === 'game') renderGame(); if (S.view === 'record') renderRecord(); if (S.view === 'about') renderAbout(); renderTitle(); }
 
 async function refresh(force) {
   if (S.busy && !force) return;
@@ -849,7 +891,7 @@ $('#only').addEventListener('click', () => { S.only = !S.only; renderBoard(); })
 for (const b of document.querySelectorAll('#mode button')) b.addEventListener('click', () => { S.mode = b.dataset.mode; try { localStorage.setItem('csl.mode', S.mode); } catch { /* the choice just will not persist */ } S.memo.clear(); renderBoard(); });
 window.addEventListener('hashchange', applyRoute);
 let resizeTimer = 0;
-window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (S.view === 'game') renderGame(); if (S.view === 'board') renderBoard(); }, 120); });
+window.addEventListener('resize', () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => { if (S.view === 'game') renderGame(); if (S.view === 'board') renderBoard(); if (S.view === 'record') renderRecord(); }, 120); });
 document.addEventListener('visibilitychange', () => { if (document.hidden) store.save(); else refresh(); });
 document.addEventListener('keydown', (e) => {
   if (e.metaKey || e.ctrlKey || e.altKey || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
@@ -870,7 +912,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 (async () => {
-  try { S.model = createModel(await getJSON('model.json?v=17')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  try { S.model = createModel(await getJSON('model.json?v=18')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
   window.cslBooted = true;
   setupSite();
   await applyRoute();

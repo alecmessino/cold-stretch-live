@@ -43,6 +43,24 @@ export function breakEven(price) {
   return price < 0 ? -price / (-price + 100) : 100 / (price + 100);
 }
 
+/**
+ * Where an open signal stands on the quote showing now. `row` is the game's latest tracked reading (the last row of
+ * track()), or null when there is no fresh line. The test is the one a new signal has to pass at the price: the chance
+ * on this quote must still beat break-even by the margin. The three-minute average is not asked again, because the
+ * question is whether the bet as logged can still be made, not whether it would fire a second time.
+ * Returns { state, line, price, quoted, chance, need, moved }. state: 'on', 'gone' (the line or the game has moved),
+ * 'off' (the rule would not fire here now: `why` is 'late' or 'lopsided'), or 'none' (no fresh line).
+ */
+export function signalNow(s, row) {
+  const m = row ? row.markets[s.market] : null;
+  if (!m || m.line == null || m.over == null) return { state: 'none' };
+  const quoted = s.market === 'total' && row.quote ? row.quote[s.side === 'Over' ? 0 : 1] : null;
+  const price = quoted == null ? -115 : quoted, chance = s.side === 'Over' ? m.over : 1 - m.over, need = breakEven(price) + RULES.margin;
+  const base = { line: m.line, price, quoted: quoted != null, chance, need, moved: m.line !== s.line };
+  if (!row.eligible) return { ...base, state: 'off', why: row.t > RULES.lastMinute ? 'late' : 'lopsided' };
+  return { ...base, state: chance >= need ? 'on' : 'gone' };
+}
+
 /** Elapsed game minutes (0-40) from ESPN's period and "MM:SS" clock. Overtime clamps to 40. */
 export function elapsed(period, clock) {
   const m = /^(\d+):(\d+(?:\.\d+)?)$/.exec(clock || '');
@@ -209,7 +227,7 @@ export function createModel(json) {
         if (m.reach >= buyDev) m.signal = 'buy';
         else if (j.eligible && size >= RULES.leanDev) m.signal = 'lean';
       });
-      out.push({ ts: r[0], t: r[1], away: r[2], home: r[3], ready, ...j });
+      out.push({ ts: r[0], t: r[1], away: r[2], home: r[3], ready, quote: [r[6] == null ? null : r[6], r[7] == null ? null : r[7]], ...j });
     }
     return out;
   }

@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createModel, elapsed, clockLabel, isClockGlitch, gapStats, breakEven, RULES } from '../js/model.js';
+import { createModel, elapsed, clockLabel, isClockGlitch, gapStats, breakEven, signalNow, RULES } from '../js/model.js';
 
 const root = new URL('..', import.meta.url);
 const model = createModel(JSON.parse(readFileSync(new URL('model.json', root))));
@@ -130,6 +130,26 @@ test('the quote on screen must still carry the edge', () => {
   const row = model.track([150, 0], steady([5, 5, 5, 0.2, 5]))[4].markets.total;
   close(s[0].chance, row.over, 'and the chance logged is the chance on that quote');
   assert.ok(row.avgEdge < row.edge, 'the average and the gap on the quote are different numbers');
+});
+
+test('an open signal is checked against the quote showing now', () => {
+  const held = steady([5, 5, 5, 5]), s = totals(held)[0];
+  assert.ok(s && s.side === 'Over', 'a signal to check');
+  const last = (rows) => { const t = model.track([150, 0], rows); return t[t.length - 1]; };
+  const same = signalNow(s, last(held));
+  assert.equal(same.state, 'on'); assert.equal(same.price, -110); assert.equal(same.quoted, true);
+  const closed = signalNow(s, last(steady([5, 5, 5, 5, 0.2])));
+  assert.equal(closed.state, 'gone', 'the book has closed the gap: the bet as logged is no longer there');
+  assert.equal(closed.moved, true);
+  assert.ok(closed.chance < closed.need);
+  const flipped = signalNow({ ...s, side: 'Under' }, last(held));
+  assert.equal(flipped.state, 'gone', 'the test is on the side the signal took, not the side the average favours');
+  assert.equal(signalNow(s, last(steady([5, 5, 5, 5, 5], { h0: 30 + RULES.blowoutLead }))).state, 'off', 'a big lead: the rule would not fire here');
+  assert.equal(signalNow(s, last(steady([5, 5, 5, 5, 5], { h0: 30 + RULES.blowoutLead }))).why, 'lopsided');
+  assert.equal(signalNow(s, last(steady([5, 5, 5, 5, 5], { start: 38.2, every: 20 }))).why, 'late');
+  assert.equal(signalNow(s, null).state, 'none', 'no fresh line, no read');
+  const team = signalNow({ ...s, market: 'home' }, last(held));
+  assert.equal(team.quoted, false); assert.equal(team.price, -115, 'team totals have no quoted price');
 });
 
 test('lopsided spots are judged apart: off in the record, on in the comparison', () => {

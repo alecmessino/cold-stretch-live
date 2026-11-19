@@ -150,6 +150,14 @@ export function gameChart(host, d) {
   svg.append('g').selectAll('path').data(d.signals).join('path').attr('d', d3.symbol(d3.symbolTriangle, 80))
     .attr('transform', (s) => `translate(${x(s.minute)},${y(s.line) + (s.side === 'Over' ? 13 : -13)}) rotate(${s.side === 'Over' ? 0 : 180})`)
     .attr('fill', (s) => (s.side === 'Over' ? 'var(--fair)' : 'var(--book)')).attr('stroke', 'var(--panel)');
+  // each signal named where it fired: the side and the line it was logged at
+  // an over is named below and to the right of its marker, an under above and to the left, so two that fire together stay apart
+  const flip = (s) => (s.side === 'Over' ? x(s.minute) + 80 > W - m.r : x(s.minute) - 80 < m.l); // no room on its own side
+  svg.append('g').selectAll('text').data(d.signals).join('text').attr('class', 'lbl sig')
+    .attr('text-anchor', (s) => ((s.side === 'Over') !== flip(s) ? 'start' : 'end'))
+    .attr('x', (s) => x(s.minute) + ((s.side === 'Over') !== flip(s) ? 9 : -9))
+    .attr('y', (s) => Math.max(m.t + 10, Math.min(m.t + topH - 6, y(s.line) + (s.side === 'Over' ? 27 : -19))))
+    .style('fill', (s) => (s.side === 'Over' ? 'var(--fair)' : 'var(--book)')).text((s) => `${s.side} ${f1(s.line)}`);
   const ends = [{ y: y(d.pregame), x: W - m.r, text: name('Pregame', f1(d.pregame)), fill: 'var(--sub)', dot: null }];
   if (d.fair.length && d.final == null) { const p = d.fair[d.fair.length - 1]; ends.push({ y: y(p.v), x: x(p.t), text: name('Fair', f1(p.v)), fill: 'var(--fair)', dot: 'var(--fair)' }); }
   if (d.book.length) { const p = d.book[d.book.length - 1]; ends.push({ y: y(p.v), x: x(p.t), text: name('Book', f1(p.v)), fill: 'var(--book)', dot: 'var(--book)' }); }
@@ -196,6 +204,40 @@ export function gameChart(host, d) {
   };
   svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', topH + gap + botH).attr('fill', 'transparent')
     .on('pointermove pointerdown', at).on('pointerleave', () => { hair.style('display', 'none'); d.onScrub(null); });
+  host.replaceChildren(svg.node());
+}
+
+/**
+ * Cumulative units, signal by signal. steps: [{ all, totals, date }] in the order the signals fired.
+ * The bold line is every signal; the thin one is game totals alone. A dashed rule marks where each slate begins.
+ */
+export function unitsChart(host, steps, { dayLabel = (d) => d } = {}) {
+  const W = Math.max(300, host.clientWidth), narrow = W < 620, H = narrow ? 220 : 260, m = { t: 14, r: narrow ? 120 : 132, b: 26, l: 34 };
+  const n = steps.length, pts = [{ i: 0, all: 0, totals: 0 }].concat(steps.map((s, i) => ({ i: i + 1, all: s.all, totals: s.totals })));
+  const lo = Math.min(0, d3.min(pts, (p) => Math.min(p.all, p.totals))), hi = Math.max(0, d3.max(pts, (p) => Math.max(p.all, p.totals))), pad = Math.max(1, (hi - lo) * 0.12);
+  const x = d3.scaleLinear([0, n], [m.l, W - m.r]), y = d3.scaleLinear([lo - pad, hi + pad], [H - m.b, m.t]);
+  const end = pts[n];
+  const svg = d3.create('svg').attr('viewBox', `0 0 ${W} ${H}`).attr('role', 'img')
+    .attr('aria-label', `Cumulative units over ${n} settled signals: ${signed(end.all)} on all of them, ${signed(end.totals)} on game totals alone.`);
+  const yt = y.ticks(5);
+  svg.append('g').selectAll('line').data(yt).join('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y).attr('y2', y).attr('stroke', (v) => (v === 0 ? 'var(--rule-strong)' : 'var(--rule-soft)'));
+  svg.append('g').selectAll('text').data(yt).join('text').attr('x', m.l - 7).attr('y', y).attr('dy', '0.32em').attr('text-anchor', 'end').text(tick);
+  // where each slate begins; with many slates only as many are named as fit
+  const starts = steps.map((s, i) => ({ i, date: s.date })).filter((s, k, arr) => k === 0 || s.date !== steps[s.i - 1].date);
+  let named = -Infinity; // a slate is named only where its name clears the one before it
+  for (const s of starts) {
+    if (s.i) svg.append('line').attr('x1', x(s.i)).attr('x2', x(s.i)).attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--rule-strong)').attr('stroke-dasharray', '2 4');
+    if (x(s.i) - named < 58 || x(s.i) + 44 > W - m.r) continue;
+    svg.append('text').attr('x', x(s.i)).attr('y', H - 7).attr('text-anchor', 'start').text(dayLabel(s.date));
+    named = x(s.i);
+  }
+  const line = (key) => d3.line().curve(d3.curveStepAfter).x((p) => x(p.i)).y((p) => y(p[key]))(pts);
+  svg.append('path').attr('d', line('totals')).attr('fill', 'none').attr('stroke', 'var(--faint)').attr('stroke-width', 1.25);
+  svg.append('path').attr('d', line('all')).attr('fill', 'none').attr('stroke', 'var(--ink)').attr('stroke-width', 2.25).attr('stroke-linejoin', 'round');
+  const ends = [{ y: y(end.all), text: `${narrow ? 'All' : 'All signals'} ${signed(end.all)}`, fill: 'var(--ink)' }, { y: y(end.totals), text: `Game totals ${signed(end.totals)}`, fill: 'var(--faint)' }].sort((a, b) => a.y - b.y);
+  if (ends[1].y - ends[0].y < 16) ends[1].y = ends[0].y + 16;
+  svg.append('circle').attr('cx', x(n)).attr('cy', y(end.all)).attr('r', 4).attr('fill', 'var(--ink)').attr('stroke', 'var(--panel)').attr('stroke-width', 1.5);
+  for (const e of ends) svg.append('text').attr('class', 'lbl').attr('x', W - m.r + 9).attr('y', e.y).attr('dy', '0.32em').style('fill', e.fill).text(e.text);
   host.replaceChildren(svg.node());
 }
 
