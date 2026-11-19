@@ -185,6 +185,15 @@ h2 { font: 600 23px/1.2 var(--serif); letter-spacing: -0.005em; }
 .sched .when { color: var(--sub); font-size: 14px; }
 .sched .who { min-width: 0; }
 .sched .what { color: var(--sub); font-size: 14px; text-align: right; }
+/* The signals feed: result, what was bought and where, how it ended */
+.feed button { grid-template-columns: 52px minmax(0, 1fr) auto; }
+.feed .when { font-weight: 600; }
+.feed .when.won { color: var(--fair); }
+.feed .when.lost { color: var(--sub); }
+.feed .when.is-open { color: var(--ink); }
+.feed .who { display: grid; gap: 1px; }
+.feed-sub { color: var(--sub); font-size: 14px; }
+.m-sub { display: none; }
 .hist svg, .chart svg { display: block; width: 100%; height: auto; overflow: visible; }
 .hist text, .chart text { font: 500 12px var(--sans); fill: var(--sub); }
 .hist .big { font-size: 20px; font-weight: 700; }
@@ -246,6 +255,7 @@ tbody tr:first-child td { border-top: 0; }
 tbody tr[tabindex] { cursor: pointer; }
 tbody tr[tabindex]:hover { background: #F8FAFC; }
 th.r, td.r { text-align: right; }
+#ledger-sheet th, #ledger-sheet td { padding-left: 12px; padding-right: 12px; } /* thirteen columns: the tighter gutter keeps Result on screen */
 td.won { font-weight: 700; color: var(--fair); }
 td.lost { color: var(--sub); }
 
@@ -307,11 +317,16 @@ td.lost { color: var(--sub); }
   .tm .pt { order: 2; margin-left: auto; padding-left: 12px; }
 }
 @media (max-width: 620px) {
+  .m-hide { display: none; }
+  .m-sub { display: block; margin-top: 1px; color: var(--sub); font-size: 13px; font-weight: 400; white-space: normal; }
+  table.is-phone { min-width: 0; }
+  .is-phone th, .is-phone td { padding: 10px 8px; }
+  .is-phone .m-first { padding-left: 14px; white-space: normal; }
   table.first-wraps { min-width: 0; }
   .first-wraps th, .first-wraps td { padding: 10px 8px; }
   .first-wraps td:first-child, .first-wraps th:first-child { white-space: normal; min-width: 8.5em; padding-left: 14px; }
   .first-wraps td:last-child, .first-wraps th:last-child { padding-right: 14px; }
-  .first-wraps :is(th, td):nth-child(4), .first-wraps :is(th, td):nth-child(6) { display: none; } /* win rate and open: derivable, and the row has to fit */
+  .first-wraps.drop-46 :is(th, td):nth-child(4), .first-wraps.drop-46 :is(th, td):nth-child(6) { display: none; } /* win rate and open: derivable, and the row has to fit */
   .mast-in { padding-top: 18px; }
   .wordmark { font-size: 26px; }
   .tagline { display: none; }

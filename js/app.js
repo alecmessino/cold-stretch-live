@@ -2,10 +2,10 @@
 // Every local file is requested with the same ?v= release number, so a browser or CDN can never pair one release's
 // page with another's scripts. Bump it everywhere on release; tests/release.test.mjs fails if the numbers disagree.
 
-import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=13';
-import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=13';
-import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=13';
-import { SITE, dataBase, safeLink, safeMail } from './site.js?v=13';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=14';
+import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=14';
+import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=14';
+import { SITE, dataBase, safeLink, safeMail } from './site.js?v=14';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -29,6 +29,7 @@ const S = {
   games: new Map(), recorded: new Map(), recordedAt: null, ledger: [], index: [],
   model: null, scoresAt: 0, error: null, polls: 0, busy: false, memo: new Map(), histKey: null, yardDay: null, ladder: [],
   mode: (() => { try { return localStorage.getItem('csl.mode') === 'table' ? 'table' : 'trend'; } catch { return 'trend'; } })(),
+  allDone: false, allFeed: false, allLedger: false, // show every finished game's chart, every signal in the feed, the whole ledger
 };
 const isToday = () => S.date === today();
 
@@ -308,7 +309,9 @@ function standGames() {
   const all = [...S.games.values()];
   const live = all.filter((g) => g.state === 'in' && preOf(g)).sort((a, b) => heat(b) - heat(a));
   if (S.only) return live.filter((g) => { const st = standing(g); return st && st.best; });
-  const done = all.filter((g) => g.state === 'post' && series(g).length).sort((a, b) => Math.abs(series(b).at(-1).avg || 0) - Math.abs(series(a).at(-1).avg || 0));
+  // Finished games: the ones that fired a signal first, then by how far the average ever got.
+  const peak = (g) => Math.max(0, ...series(g).filter((p) => !p.off && p.avg != null).map((p) => Math.abs(p.avg)));
+  const done = all.filter((g) => g.state === 'post' && series(g).length).sort((a, b) => signalsOf(b).length - signalsOf(a).length || peak(b) - peak(a));
   return live.concat(done);
 }
 
@@ -322,7 +325,7 @@ function schedRow(g, right) {
 
 /** The slate in one finding: how far the book ran from fair, which way it missed, and whether anything held. */
 function renderLead(all) {
-  const gaps = [], devs = [], plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+  const gaps = [], devs = [];
   let signals = 0, measured = 0;
   for (const g of all) {
     const s = series(g).filter((p) => p.t >= RULES.measureFrom && p.t <= RULES.measureTo && !p.off); // only where a signal can fire
@@ -367,6 +370,35 @@ function renderHistogram(gaps) {
   S.histKey = key;
 }
 
+const DONE_SHOWN = 8, FEED_SHOWN = 6, LEDGER_SHOWN = 40;
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+
+/** Every signal on the slate in one list: open ones first, then the newest. The quickest read of what there is to act on. */
+function renderFeed(all) {
+  const rows = [];
+  for (const g of all) for (const s of signalsOf(g)) rows.push({ g, s });
+  rows.sort((a, b) => (a.s.result === 'Pending' ? 0 : 1) - (b.s.result === 'Pending' ? 0 : 1) || b.s.at - a.s.at);
+  const block = $('#feed-block'), open = rows.filter((r) => r.s.result === 'Pending').length;
+  block.hidden = !rows.length || S.only;
+  if (block.hidden) return;
+  const won = rows.filter((r) => r.s.result === 'Won').length, lost = rows.filter((r) => r.s.result === 'Lost').length;
+  $('#feed-h').textContent = open ? `${plural(open, 'signal')} open, ${won}–${lost} settled` : `${plural(rows.length, 'signal')} on this slate: ${won} won, ${lost} lost`;
+  const shown = S.allFeed ? rows : rows.slice(0, Math.max(FEED_SHOWN, open));
+  $('#feed').replaceChildren(...shown.map(({ g, s }) => {
+    const b = h('button'); b.type = 'button';
+    const name = s.market === 'total' ? 'Game total' : `${(s.market === 'away' ? g.away : g.home).name} total`;
+    const who = h('span', 'who');
+    who.append(h('span', '', `${name}, ${s.side.toLowerCase()} ${f1(s.line)}`), h('span', 'feed-sub', `${g.away.name} at ${g.home.name}, ${clockLabel(s.minute)}`));
+    const res = s.result === 'Pending' ? 'Open' : s.result;
+    b.append(h('span', `when ${s.result === 'Won' ? 'won' : s.result === 'Lost' ? 'lost' : s.result === 'Pending' ? 'is-open' : ''}`, res), who, h('span', 'what', s.final == null ? `fair ${f1(s.fair)}` : `final ${s.final}`));
+    b.addEventListener('click', () => go(gameHash(g.id, s.market)));
+    return b;
+  }));
+  const moreBtn = $('#feed-more');
+  moreBtn.hidden = shown.length === rows.length;
+  moreBtn.textContent = `Show all ${rows.length} signals`;
+}
+
 function renderBoard() {
   $('#day').textContent = dayLabel(S.date);
   $('#only').setAttribute('aria-pressed', String(S.only));
@@ -376,8 +408,15 @@ function renderBoard() {
   for (const b of document.querySelectorAll('#mode button')) b.setAttribute('aria-pressed', String(b.dataset.mode === S.mode));
   $('#trend-key').hidden = !trend || !rows.length; $('#table-key').hidden = trend || !rows.length;
   $('#wall').hidden = !trend || !rows.length; $('#stand').hidden = trend || !rows.length;
+  // A finished slate is sixty charts long. Live games always draw; finished ones show the first few until asked.
+  const liveRows = rows.filter((g) => g.state === 'in'), doneRows = rows.filter((g) => g.state !== 'in');
+  const shown = trend && !S.allDone ? liveRows.concat(doneRows.slice(0, DONE_SHOWN)) : rows;
+  const more = $('#more-games');
+  more.hidden = !trend || shown.length === rows.length;
+  more.textContent = `Show all ${doneRows.length} finished games`;
+  renderFeed(all);
   if (trend) {
-    const cards = rows.map(trendCard);
+    const cards = shown.map(trendCard);
     $('#wall').replaceChildren(...cards.map((c) => c[0]));
     for (const c of cards) c[1]();
     $('#stand-rows').replaceChildren();
@@ -518,6 +557,7 @@ function renderGame() {
   const sigRow = (s) => {
     const tr = document.createElement('tr');
     for (const [v, c] of [[label(s)], [s.side], [clockLabel(s.minute)], [s.score], [f1(s.line), 'r'], [f1(s.fair), 'r'], [signed(s.dev), 'r'], [`${Math.round(s.chance * 100)}%`, 'r'], [s.final == null ? '' : s.final, 'r'], [s.result, s.result === 'Won' ? 'won' : s.result === 'Lost' ? 'lost' : '']]) tr.append(h('td', c || '', v));
+    forPhone(tr, [0, 4, 8, 9], `${s.side}, ${clockLabel(s.minute)}`);
     return tr;
   };
   $('#sig-rows').replaceChildren(...signals.map(sigRow));
@@ -585,15 +625,29 @@ function renderRecord() {
   const ladder = S.ladder.filter((r) => r.rule), have = (rule) => ladder.some((r) => r.rule === rule);
   $('#ladder-rows').replaceChildren(...Object.entries(RULE_LABELS).filter(([rule]) => have(rule)).map(([rule, label]) => ladderRow(label, ladder.filter((r) => r.rule === rule && r.stage === 'all'))));
   $('#ladder-none').hidden = ladder.length > 0; $('#ladder-sheet').hidden = !ladder.length;
+  // What the model said against what happened: the stated chance of each settled signal, in bands.
+  const judged = S.ledger.filter((s) => (s.result === 'Won' || s.result === 'Lost') && s.chance != null);
+  const bands = [[0, 58, 'Under 58%'], [58, 61, '58 to 61%'], [61, 65, '61 to 65%'], [65, 101, '65% and up']].map(([lo, hi, label]) => [label, judged.filter((s) => s.chance >= lo && s.chance < hi)]).filter(([, rows]) => rows.length);
+  const saidRow = (label, rows) => {
+    const tr = document.createElement('tr'), won = rows.filter((s) => s.result === 'Won').length;
+    for (const [v, c] of [[label], [rows.length, 'r'], [`${Math.round(rows.reduce((a, s) => a + s.chance, 0) / rows.length)}%`, 'r'], [`${Math.round(100 * won / rows.length)}%`, 'r']]) tr.append(h('td', c || '', v));
+    return tr;
+  };
+  $('#said-rows').replaceChildren(...bands.map(([label, rows]) => saidRow(label, rows)), ...(judged.length ? [saidRow('Every settled signal', judged)] : []));
+  $('#said-block').hidden = judged.length < 20; // fewer than that says nothing
   const ideas = Object.entries(IDEA_LABELS).filter(([rule]) => have(rule));
   $('#idea-rows').replaceChildren(...ideas.map(([rule, label]) => ladderRow(label, ladder.filter((r) => r.rule === rule && r.stage === 'all'))));
   $('#ideas-block').hidden = ideas.length < 2; // the baseline alone is not a comparison
   $('#stage-rows').replaceChildren(...['4 to 20', '20 to 34', '34 to 38'].map((stage) => ladderRow(`Minutes ${stage}`, ladder.filter((r) => r.rule === 'signal' && r.stage === stage))));
   $('#stage-block').hidden = !ladder.length;
-  $('#ledger-rows').replaceChildren(...L.map((s) => {
+  const ledgerShown = S.allLedger ? L : L.slice(0, LEDGER_SHOWN);
+  $('#ledger-more').hidden = ledgerShown.length === L.length;
+  $('#ledger-more').textContent = `Show all ${L.length} signals`;
+  $('#ledger-rows').replaceChildren(...ledgerShown.map((s) => {
     const tr = document.createElement('tr'); tr.tabIndex = 0;
     const price = `${s.price > 0 ? '+' : ''}${s.price}${s.priced === 'Assumed' ? ' est.' : ''}`;
     for (const [v, c] of [[dayLabel(s.date).split(', ').pop()], [s.matchup], [s.market], [s.side], [clockLabel(s.t)], [s.score], [f1(s.line), 'r'], [price, 'r'], [f1(s.fair), 'r'], [s.dev == null ? '–' : signed(s.dev), 'r'], [`${s.chance}%`, 'r'], [s.final == null ? '' : s.final, 'r'], [s.result, s.result === 'Won' ? 'won' : s.result === 'Lost' ? 'lost' : '']]) tr.append(h('td', c || '', v));
+    forPhone(tr, [1, 6, 11, 12], `${s.market}, ${s.side.toLowerCase()}, ${dayLabel(s.date).split(', ').pop()}`);
     const open = () => go(gameHash(s.game, s.mkt, s.date));
     tr.addEventListener('click', open); tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') open(); });
     return tr;
@@ -686,6 +740,21 @@ function renderAbout() {
   );
 }
 
+/* ---------- wide tables on a phone: keep the columns that answer "what, at what line, how did it end", fold the rest into a second line ---------- */
+function forPhone(tr, keep, sub) {
+  [...tr.children].forEach((cell, i) => { if (!keep.includes(i)) cell.classList.add('m-hide'); });
+  tr.children[keep[0]].classList.add('m-first');
+  tr.children[keep[0]].append(h('span', 'm-sub', sub));
+}
+for (const [id, keep] of [['ledger-rows', [1, 6, 11, 12]], ['sig-rows', [0, 4, 8, 9]], ['shadow-rows', [0, 4, 8, 9]]]) {
+  const table = document.getElementById(id).closest('table');
+  table.classList.add('is-phone');
+  [...table.querySelectorAll('thead th')].forEach((th, i) => { if (!keep.includes(i)) th.classList.add('m-hide'); else if (i === keep[0]) th.classList.add('m-first'); });
+}
+$('#more-games').addEventListener('click', () => { S.allDone = true; render(); });
+$('#feed-more').addEventListener('click', () => { S.allFeed = true; render(); });
+$('#ledger-more').addEventListener('click', () => { S.allLedger = true; render(); });
+
 /* ---------- sharing: the phone's share sheet where there is one, the clipboard where there is not ---------- */
 function shareWords(kind) {
   const g = kind === 'game' ? S.games.get(S.sel) : null;
@@ -712,7 +781,9 @@ function renderPulse() {
   if (S.error) { p.replaceChildren(h('b', '', 'ESPN is not responding'), document.createTextNode(` (${S.error}). Retrying.`)); return; }
   if (!S.scoresAt) { p.textContent = 'Loading'; return; }
   const age = Math.max(0, Math.round((Date.now() - S.scoresAt) / 1000));
-  const rec = S.recordedAt ? `, recorder ${Math.max(0, Math.round((Date.now() / 1000 - S.recordedAt) / 60))} min ago` : '';
+  // The recorder only runs while games are on, so its age means something only then. Late, with games live, it is a warning.
+  const mins = S.recordedAt ? Math.max(0, Math.round((Date.now() / 1000 - S.recordedAt) / 60)) : null;
+  const rec = mins == null || !isToday() || !live ? '' : mins > 12 ? `, recorder last saved ${mins} min ago` : `, recorder ${mins} min ago`;
   p.replaceChildren(h('b', '', isToday() ? `${live} live` : dayLabel(S.date)), document.createTextNode(`, scores ${age}s ago`), h('span', 'wide', rec));
 }
 function render() { S.memo.clear(); renderPulse(); if (S.view === 'board') renderBoard(); if (S.view === 'game') renderGame(); if (S.view === 'record') renderRecord(); if (S.view === 'about') renderAbout(); }
@@ -769,7 +840,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 (async () => {
-  try { S.model = createModel(await getJSON('model.json?v=13')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  try { S.model = createModel(await getJSON('model.json?v=14')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
   window.cslBooted = true;
   setupSite();
   await applyRoute();

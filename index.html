@@ -23,7 +23,7 @@
 <meta name="apple-mobile-web-app-title" content="Price of Pace">
 <link rel="preload" href="fonts/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/app.css?v=13">
+<link rel="stylesheet" href="css/app.css?v=14">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -76,6 +76,12 @@
     </div>
     <p class="book-link" id="book-line" hidden></p>
 
+    <div class="block" id="feed-block" hidden>
+      <h2 id="feed-h">Signals on this slate</h2>
+      <div class="sched feed" id="feed"></div>
+      <p><button type="button" class="key" id="feed-more" hidden></button></p>
+    </div>
+
     <div class="block">
       <div class="block-head">
         <h2>The gap in every game, minute by minute</h2>
@@ -86,10 +92,14 @@
       </div>
       <div id="trend-key">
         <p class="gloss"><span><i class="k-line"></i>Three-minute average</span><span><i class="k-thin"></i>Each reading</span><span><i class="k-band"></i>Within 2 deviations: no trade</span><span><i class="k-low"></i>Book low: over side</span><span><i class="k-high"></i>Book high: under side</span><span><i class="k-off"></i>Lopsided game: signals off</span></p>
-        <p class="note" id="sigma-note"></p>
+        <details class="fold" id="howto">
+          <summary>How to read these charts</summary>
+          <p class="note" id="sigma-note"></p>
+        </details>
       </div>
       <p class="note" id="table-key" hidden>The three-minute average of fair minus book, in deviations. Dot: now. Bar: its range since recording began.</p>
       <div class="wall" id="wall" hidden></div>
+      <p><button type="button" class="key" id="more-games" hidden></button></p>
       <div class="panel stand" id="stand" hidden>
         <div class="stand-head" aria-hidden="true">
           <span>Game</span><span>Clock</span>
@@ -215,7 +225,7 @@
       <h2>What each rule would have done</h2>
       <p class="note">Nine rules run on the same readings, so the rule is chosen on results and not by feel. Readings are about a minute apart. One deviation is the usual spread of the three-minute average, about 1.2 points for a game total. November 17 is measured against itself; every later slate uses only the slates before it. The last row is the signal applied only where it is switched off, to test that choice. It is not in the record.</p>
       <div class="sheet" id="ladder-sheet">
-        <table class="first-wraps">
+        <table class="first-wraps drop-46">
           <thead><tr><th>Rule</th><th class="r">Signals</th><th class="r">Won–lost</th><th class="r">Win rate</th><th class="r">Units</th><th class="r">Open</th></tr></thead>
           <tbody id="ladder-rows"></tbody>
         </table>
@@ -227,7 +237,7 @@
       <h2>Ideas under test</h2>
       <p class="note">Each row is the signal with one thing changed, run on the same readings. None of them is in the record. An idea earns its way into the rule by holding up here over a few hundred signals, not over one night.</p>
       <div class="sheet">
-        <table class="first-wraps">
+        <table class="first-wraps drop-46">
           <thead><tr><th>Idea</th><th class="r">Signals</th><th class="r">Won–lost</th><th class="r">Win rate</th><th class="r">Units</th><th class="r">Open</th></tr></thead>
           <tbody id="idea-rows"></tbody>
         </table>
@@ -238,9 +248,20 @@
       <h2>The signal by stage of the game</h2>
       <p class="note">If one stretch of the game carries the results, the rule should be narrowed to it.</p>
       <div class="sheet">
-        <table class="first-wraps">
+        <table class="first-wraps drop-46">
           <thead><tr><th>Stage</th><th class="r">Signals</th><th class="r">Won–lost</th><th class="r">Win rate</th><th class="r">Units</th><th class="r">Open</th></tr></thead>
           <tbody id="stage-rows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="block" id="said-block" hidden>
+      <h2>What the model said, against what happened</h2>
+      <p class="note">Every signal carries the model’s chance of winning. If that number is honest, signals given 60% should win about 60% of the time. These are small samples for now, and a model that ignores what the sportsbook knows will tend to say too much.</p>
+      <div class="sheet">
+        <table class="first-wraps">
+          <thead><tr><th>The model said</th><th class="r">Signals</th><th class="r">Said, on average</th><th class="r">Won</th></tr></thead>
+          <tbody id="said-rows"></tbody>
         </table>
       </div>
     </div>
@@ -253,6 +274,7 @@
           <tbody id="ledger-rows"></tbody>
         </table>
       </div>
+      <p><button type="button" class="key" id="ledger-more" hidden></button></p>
       <p class="quiet" id="ledger-none" hidden>No signals logged yet.</p>
       <p class="quiet small">Game totals are settled at the sportsbook’s live price. Team totals are implied from the live total and spread, and priced at an estimated -115.</p>
     </div>
@@ -288,7 +310,7 @@
 </footer>
 
 <script src="vendor/d3.v7.9.2.min.js"></script>
-<script type="module" src="js/app.js?v=13"></script>
+<script type="module" src="js/app.js?v=14"></script>
 <script>
   // If the app has not started after ten seconds, say so instead of sitting on "Loading".
   setTimeout(function () {

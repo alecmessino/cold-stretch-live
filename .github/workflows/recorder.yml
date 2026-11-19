@@ -3,11 +3,19 @@ name: recorder
 # Records live scores and DraftKings live lines (via ESPN) every 30 seconds while games are on,
 # and commits the tracks to the `data` branch. Each run lasts up to ~5.5 hours and hands over to the next.
 on:
+  # GitHub's scheduler can run late or skip a slot, so there are several. A start while one is running just waits its turn.
   schedule:
     - cron: '17 15 * * *'   # 10:17 AM Eastern, before the first tips
-    - cron: '47 20 * * *'   # 3:47 PM Eastern, backup start
-    - cron: '17 2 * * *'    # 9:17 PM Eastern, backup start
+    - cron: '47 17 * * *'   # 12:47 PM Eastern
+    - cron: '47 20 * * *'   # 3:47 PM Eastern
+    - cron: '17 23 * * *'   # 6:17 PM Eastern, before the evening slate
+    - cron: '17 2 * * *'    # 9:17 PM Eastern
   workflow_dispatch:
+  # A push that touches the recorder starts it, so a rule change is applied at once and the recorder can be restarted
+  # by anyone who can push: change .github/recorder-start and push.
+  push:
+    branches: [main]
+    paths: ['recorder/**', '.github/workflows/recorder.yml', '.github/recorder-start']
 
 permissions:
   contents: write
