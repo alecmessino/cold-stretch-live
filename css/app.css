@@ -281,6 +281,14 @@ td.lost { color: var(--sub); }
 .about-row p + p { margin-top: 10px; }
 .about-row a { color: var(--ink); text-underline-offset: 2px; }
 
+/* First visit: three lines on how to read the site */
+.primer { padding: 20px 24px; background: var(--panel); border: 1px solid var(--rule); border-left: 3px solid var(--ink); border-radius: 4px; }
+.primer-rows { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 40px; }
+.primer-rows p { color: var(--sub); font-size: 15px; text-wrap: pretty; }
+.primer-rows b { color: var(--ink); font-weight: 600; }
+.primer-foot { margin-top: 16px; display: flex; align-items: center; gap: 20px; font-size: 15px; }
+.primer-foot a { color: var(--ink); text-underline-offset: 3px; }
+
 /* Email list: one quiet panel under every view */
 .page > .signup { margin-top: 56px; padding: 24px; background: var(--panel); border: 1px solid var(--rule); border-radius: 4px; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 26em); gap: 16px 56px; align-items: start; }
 .signup-say { display: flex; flex-direction: column; gap: 8px; }
@@ -298,6 +306,8 @@ td.lost { color: var(--sub); }
 
 /* ---------- small screens ---------- */
 @media (max-width: 860px) {
+  .primer { padding: 18px 20px; }
+  .primer-rows { grid-template-columns: 1fr; }
   .about-row { grid-template-columns: 1fr; padding: 20px 0; }
   .page > .signup { grid-template-columns: 1fr; padding: 20px; }
   .stand { --cols: minmax(0, 1fr) auto; }

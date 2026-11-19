@@ -2,10 +2,11 @@
 // Every local file is requested with the same ?v= release number, so a browser or CDN can never pair one release's
 // page with another's scripts. Bump it everywhere on release; tests/release.test.mjs fails if the numbers disagree.
 
-import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=14';
-import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=14';
-import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=14';
-import { SITE, dataBase, safeLink, safeMail } from './site.js?v=14';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=15';
+import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=15';
+import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=15';
+import { SITE, dataBase, safeLink, safeMail } from './site.js?v=15';
+import { boardWords } from './words.js?v=15';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -335,19 +336,14 @@ function renderLead(all) {
     signals += signalsOf(g).length;
   }
   const st = { ...gapStats(devs, RULES.buyDev), abs: gapStats(gaps).abs }, live = all.filter((g) => g.state === 'in').length, ahead = all.filter((g) => g.state === 'pre').sort((a, b) => new Date(a.start) - new Date(b.start));
-  let head, sub;
-  if (!S.scoresAt) [head, sub] = ['Loading the slate.', ''];
-  else if (!st.n && !all.length) [head, sub] = ['No games on this date.', ''];
-  else if (!st.n && isToday() && live) [head, sub] = [`${plural(live, 'game')} in progress. The first lines are coming in.`, `The figures fill in as the sportsbook posts live totals. Each game is measured from minute ${RULES.measureFrom}.`];
-  else if (!st.n && ahead.length && !all.some((g) => g.state === 'post')) [head, sub] = [`${plural(ahead.length, 'game')} on the slate. The first tips at ${timeLabel(ahead[0].start)}.`, `The board fills in at tip-off. Each game is measured from minute ${RULES.measureFrom}.`];
-  else if (!st.n && isToday() && ahead.length) [head, sub] = [`${plural(ahead.length, 'game')} still to tip. The next is at ${timeLabel(ahead[0].start)}.`, `No live line has been recorded yet today. Each game is measured from minute ${RULES.measureFrom}.`];
-  else if (!st.n) [head, sub] = ['No live lines were recorded for this slate.', 'ESPN drops the live line at the final whistle, so a slate can only be measured while the recorder is running.'];
-  else {
-    const when = isToday() ? 'today' : `on ${new Date(toUTC(S.date)).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' })}`;
-    const lean = st.high >= 3 && st.high >= 2 * st.low ? ' When it missed, it was mostly too high.' : st.low >= 3 && st.low >= 2 * st.high ? ' When it missed, it was mostly too low.' : st.high + st.low < 3 ? ' It rarely missed by much.' : ' It missed in both directions.';
-    head = `The sportsbook’s live total ${isToday() ? 'has sat' : 'sat'} ${st.abs.toFixed(1)} points from fair ${when}.${lean}`;
-    sub = `A cold-stretch buy needs the three-minute average ${RULES.buyDev} deviations too low. That was true on ${st.low.toFixed(1)}% of ${plural(st.n, 'reading')}. ${signals ? `${plural(signals, 'signal')} fired.` : 'Nothing has qualified as a signal, so the record for this slate is empty.'}`;
-  }
+  // The headline says what there is to act on; js/words.js holds the wording for every state of a slate.
+  const sig = all.flatMap((g) => signalsOf(g)), count = (r) => sig.filter((x) => x.result === r).length;
+  const { head, sub } = boardWords({
+    loaded: !!S.scoresAt, today: isToday(), weekday: new Date(toUTC(S.date)).toLocaleDateString('en-US', { weekday: 'long', timeZone: 'UTC' }),
+    games: all.length, live, ahead: ahead.length, nextTip: ahead.length ? timeLabel(ahead[0].start) : '', anyFinal: all.some((g) => g.state === 'post'),
+    readings: st.n, apart: st.abs || 0, firstMinute: RULES.firstMinute,
+    signals: { n: sig.length, open: count('Pending'), won: count('Won'), lost: count('Lost'), pushed: count('Push') },
+  });
   $('#lead-head').textContent = head;
   $('#lead-sub').textContent = sub; $('#lead-sub').hidden = !sub;
   $('#fig-abs').textContent = st.n ? st.abs.toFixed(1) : '–';
@@ -382,7 +378,7 @@ function renderFeed(all) {
   block.hidden = !rows.length || S.only;
   if (block.hidden) return;
   const won = rows.filter((r) => r.s.result === 'Won').length, lost = rows.filter((r) => r.s.result === 'Lost').length;
-  $('#feed-h').textContent = open ? `${plural(open, 'signal')} open, ${won}–${lost} settled` : `${plural(rows.length, 'signal')} on this slate: ${won} won, ${lost} lost`;
+  $('#feed-h').textContent = open ? 'Signals, open ones first' : 'Signals, newest first'; // the headline carries the count and the record
   const shown = S.allFeed ? rows : rows.slice(0, Math.max(FEED_SHOWN, open));
   $('#feed').replaceChildren(...shown.map(({ g, s }) => {
     const b = h('button'); b.type = 'button';
@@ -751,6 +747,10 @@ for (const [id, keep] of [['ledger-rows', [1, 6, 11, 12]], ['sig-rows', [0, 4, 8
   table.classList.add('is-phone');
   [...table.querySelectorAll('thead th')].forEach((th, i) => { if (!keep.includes(i)) th.classList.add('m-hide'); else if (i === keep[0]) th.classList.add('m-first'); });
 }
+// A first visit gets three lines on how to read the site. Dismissed once, it stays away on this device.
+const seenPrimer = () => { try { return localStorage.getItem('csl.primer') === '1'; } catch { return false; } };
+$('#primer').hidden = seenPrimer();
+$('#primer-ok').addEventListener('click', () => { $('#primer').hidden = true; try { localStorage.setItem('csl.primer', '1'); } catch { /* private mode: it will show again next visit */ } });
 $('#more-games').addEventListener('click', () => { S.allDone = true; render(); });
 $('#feed-more').addEventListener('click', () => { S.allFeed = true; render(); });
 $('#ledger-more').addEventListener('click', () => { S.allLedger = true; render(); });
@@ -840,7 +840,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 (async () => {
-  try { S.model = createModel(await getJSON('model.json?v=14')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  try { S.model = createModel(await getJSON('model.json?v=15')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
   window.cslBooted = true;
   setupSite();
   await applyRoute();

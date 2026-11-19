@@ -23,7 +23,7 @@
 <meta name="apple-mobile-web-app-title" content="Price of Pace">
 <link rel="preload" href="fonts/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/app.css?v=14">
+<link rel="stylesheet" href="css/app.css?v=15">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -62,16 +62,25 @@
       </div>
     </div>
 
+    <aside class="primer" id="primer" aria-label="How to read this site" hidden>
+      <div class="primer-rows">
+        <p><b>Two numbers.</b> Orange is the sportsbook’s live total. Blue is the fair number: the score so far plus a normal pace for the time left.</p>
+        <p><b>One gap.</b> Each chart follows the gap between them through the game. Inside the shaded band it is too small to mean anything.</p>
+        <p><b>A signal.</b> When the gap holds outside the band for three minutes, at a price that pays, it is logged and graded on the final score.</p>
+      </div>
+      <p class="primer-foot"><button type="button" class="key is-primary" id="primer-ok">Got it</button><a href="#/about">How it works, in full</a></p>
+    </aside>
+
     <div class="lead">
       <div class="lead-say">
         <h1 class="headline" id="lead-head">Loading the slate.</h1>
         <p class="standfirst" id="lead-sub"></p>
       </div>
       <dl class="figures">
-        <div><dt>points between book and fair, on average</dt><dd id="fig-abs">–</dd></div>
-        <div><dt>of the time the book averaged 2 or more deviations under fair</dt><dd id="fig-low">–</dd></div>
-        <div><dt>of the time the book averaged 2 or more deviations over fair</dt><dd id="fig-high">–</dd></div>
-        <div><dt>signals: the three-minute average 2 deviations out, at a price that pays</dt><dd id="fig-sig">–</dd></div>
+        <div><dt>points apart, sportsbook and fair, on average</dt><dd id="fig-abs">–</dd></div>
+        <div><dt>of readings had the sportsbook well under fair</dt><dd id="fig-low">–</dd></div>
+        <div><dt>of readings had the sportsbook well over fair</dt><dd id="fig-high">–</dd></div>
+        <div><dt>signals logged on this slate</dt><dd id="fig-sig">–</dd></div>
       </dl>
     </div>
     <p class="book-link" id="book-line" hidden></p>
@@ -310,7 +319,7 @@
 </footer>
 
 <script src="vendor/d3.v7.9.2.min.js"></script>
-<script type="module" src="js/app.js?v=14"></script>
+<script type="module" src="js/app.js?v=15"></script>
 <script>
   // If the app has not started after ten seconds, say so instead of sitting on "Loading".
   setTimeout(function () {
