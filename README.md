@@ -102,6 +102,7 @@ Nothing else in the code names an owner or an address. Each slot draws nothing u
 | `source`, `contact` | Optional footer link to the code and a contact address on the About page. |
 | `analytics` | Cloudflare Web Analytics token. Counts visits without cookies. |
 | `newsletter.action` | The provider's plain HTML form address. Turns on the signup box under every view. |
+| `support.url` | A payment page for readers who want to chip in. Adds one footer link and a line on the About page. |
 | `book.name`, `book.url` | A sportsbook referral link shown beside a live signal and marked "paid link" where it is clicked. The About page discloses it. |
 
 For a custom domain: add a `CNAME` file with the domain, set `data` to `https://raw.githubusercontent.com/<owner>/<repo>/data/`, and point DNS at GitHub Pages.

@@ -2,10 +2,10 @@
 // Every local file is requested with the same ?v= release number, so a browser or CDN can never pair one release's
 // page with another's scripts. Bump it everywhere on release; tests/release.test.mjs fails if the numbers disagree.
 
-import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=11';
-import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=11';
-import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=11';
-import { SITE, dataBase, safeLink, safeMail } from './site.js?v=11';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats } from './model.js?v=12';
+import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=12';
+import { rangePlot, histogram, trendPanel, gameChart, fmt } from './charts.js?v=12';
+import { SITE, dataBase, safeLink, safeMail } from './site.js?v=12';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -591,6 +591,7 @@ function renderRecord() {
 /* ---------- about, and how the site pays for itself (js/site.js; every slot is off until it is filled in) ---------- */
 const BOOK = safeLink(SITE.book.url) && SITE.book.name ? { name: SITE.book.name, url: safeLink(SITE.book.url) } : null;
 const LIST = safeLink(SITE.newsletter.action);
+const SUPPORT = safeLink(SITE.support.url);
 
 /** A referral link, labelled as paid at the place it is clicked. */
 function bookLink(host, lead, text) {
@@ -618,6 +619,7 @@ function setupSite() {
   $('#tagline').textContent = SITE.tagline;
   const links = $('#foot-links'), source = safeLink(SITE.source);
   if (source) { const a = h('a', '', 'Source, model and recorded data'); a.href = source; links.append(a); }
+  if (SUPPORT) { const a = h('a', '', SITE.support.label || 'Support the site'); a.href = SUPPORT; a.target = '_blank'; a.rel = 'noopener'; links.append(a); }
   if (LIST) {
     $('#signup-form').action = LIST;
     $('#signup-email').name = SITE.newsletter.field || 'email';
@@ -660,7 +662,8 @@ function renderAbout() {
       p(`There are no accounts and no advertising trackers. Your browser keeps its own copy of the lines it has seen, on your device, so a reload does not lose them. ${counted ? 'Visits are counted without cookies and without anything that identifies you.' : 'Visits are not counted.'}`),
       p(`Scores, lines and the record are fetched straight from ESPN and GitHub, which see your connection the way any site you visit does.${LIST ? ' If you join the email list, your address is held by the mailing service and used for that list only.' : ''}`)),
     row('How the site is paid for',
-      p(BOOK ? `Links to ${BOOK.name} are paid referrals: the site receives a flat fee when a new customer opens an account through one. It is never paid a share of anyone’s losses, and no sportsbook sees or shapes the model, the signals or the record.` : 'The site carries no advertising and no paid links.')),
+      p(BOOK ? `Links to ${BOOK.name} are paid referrals: the site receives a flat fee when a new customer opens an account through one. It is never paid a share of anyone’s losses, and no sportsbook sees or shapes the model, the signals or the record.` : 'The site carries no advertising and no paid links.'),
+      ...(SUPPORT ? [p('Readers who find it useful can chip in through the support link at the foot of the page. It buys nothing extra: everything here stays open to everyone.')] : [])),
   );
   if (mail) rows.append(row('Contact', p('Questions and corrections: ', link(mail, `mailto:${mail}`), '.')));
   host.append(
@@ -668,6 +671,25 @@ function renderAbout() {
     h('p', 'standfirst', 'During a game the sportsbook posts a total and keeps moving it. This site works out its own from the score and the clock, sets the two side by side, and logs a signal when they sit far apart for long enough. Then it keeps score on itself.'),
     rows,
   );
+}
+
+/* ---------- sharing: the phone's share sheet where there is one, the clipboard where there is not ---------- */
+function shareWords(kind) {
+  const g = kind === 'game' ? S.games.get(S.sel) : null;
+  if (g) return `${g.away.name} at ${g.home.name}: the sportsbook’s live total against a fair number.`;
+  if (kind === 'record') return 'Every signal logged and settled, wins and losses alike.';
+  return 'Every live college basketball total, measured against a fair number.';
+}
+for (const b of document.querySelectorAll('[data-share]')) {
+  b.addEventListener('click', async () => {
+    const data = { title: SITE.name, text: shareWords(b.dataset.share), url: location.href }, label = b.textContent;
+    try {
+      if (navigator.share) { await navigator.share(data); return; }
+      await navigator.clipboard.writeText(data.url);
+      b.textContent = 'Link copied';
+      setTimeout(() => { b.textContent = label; }, 1800);
+    } catch { /* the share sheet was closed, or the clipboard is not available */ }
+  });
 }
 
 /* ---------- loop ---------- */
@@ -734,7 +756,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 (async () => {
-  try { S.model = createModel(await getJSON('model.json?v=11')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  try { S.model = createModel(await getJSON('model.json?v=12')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
   window.cslBooted = true;
   setupSite();
   await applyRoute();

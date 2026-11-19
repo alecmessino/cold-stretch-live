@@ -29,6 +29,10 @@ export const SITE = {
   // Sportsbook referral link, shown beside a live signal. Empty url: no link is drawn and the About page says the
   // site carries no paid links. Take flat per-signup terms only; the disclosure on the About page says so.
   book: { name: '', url: '' },
+
+  // A link for readers who want to chip in (a payment page under the site's name, never a personal one).
+  // Empty url: no link is drawn.
+  support: { label: 'Support the site', url: '' },
 };
 
 /** The recorder's base address: an explicit ?data= wins, then the config, then a github.io address, then a local folder. */

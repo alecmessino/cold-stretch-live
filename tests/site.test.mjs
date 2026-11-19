@@ -24,6 +24,7 @@ test('every paid or tracking slot ships switched off unless it is complete', () 
   assert.equal(!!SITE.book.url, !!SITE.book.name, 'a referral link needs both a name and an address');
   if (SITE.book.url) assert.ok(safeLink(SITE.book.url));
   if (SITE.contact) assert.ok(safeMail(SITE.contact));
+  if (SITE.support.url) assert.ok(safeLink(SITE.support.url));
   if (SITE.data) assert.match(SITE.data, /^https:\/\/.+\/$/);
 });
 

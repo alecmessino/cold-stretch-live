@@ -190,6 +190,8 @@ h2 { font: 600 23px/1.2 var(--serif); letter-spacing: -0.005em; }
 .hist .big { font-size: 20px; font-weight: 700; }
 
 /* ---------- game ---------- */
+.share-row { margin-top: 16px; }
+.back { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .back a { display: inline-block; padding: 6px 0; color: var(--sub); font-weight: 500; text-decoration: none; }
 .back a:hover { color: var(--ink); }
 #view-game { gap: 28px; }
