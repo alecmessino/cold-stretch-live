@@ -328,6 +328,9 @@ td.lost { color: var(--sub); }
 /* ---------- small screens ---------- */
 @media (max-width: 860px) {
   .primer { padding: 18px 20px; }
+  /* a first visit reads the headline before the guide */
+  #view-board > .tool { order: -2; }
+  #view-board > .lead { order: -1; }
   .primer-rows { grid-template-columns: 1fr; }
   .about-row { grid-template-columns: 1fr; padding: 20px 0; }
   .page > .signup { grid-template-columns: 1fr; padding: 20px; }

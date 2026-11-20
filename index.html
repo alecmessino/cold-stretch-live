@@ -23,7 +23,7 @@
 <meta name="apple-mobile-web-app-title" content="Price of Pace">
 <link rel="preload" href="fonts/ibm-plex-sans.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="fonts/newsreader.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="css/app.css?v=19">
+<link rel="stylesheet" href="css/app.css?v=20">
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -216,9 +216,10 @@
     <dl class="sums">
       <div><dt>Won–lost, scored live</dt><dd id="r-all">–</dd></div>
       <div><dt>Units, 1 risked per signal</dt><dd id="r-units">–</dd></div>
-      <div><dt>Overs: book under fair</dt><dd id="r-over">–</dd></div>
-      <div><dt>Unders: book over fair</dt><dd id="r-under">–</dd></div>
+      <div><dt>Games ahead–behind</dt><dd id="r-games">–</dd></div>
+      <div><dt>Game totals, quoted price</dt><dd id="r-totals">–</dd></div>
     </dl>
+    <p class="note" id="r-sides" hidden></p>
 
     <div class="block" id="units-block" hidden>
       <h2>Units won or lost, signal by signal</h2>
@@ -352,7 +353,7 @@
 </footer>
 
 <script src="vendor/d3.v7.9.2.min.js"></script>
-<script type="module" src="js/app.js?v=19"></script>
+<script type="module" src="js/app.js?v=20"></script>
 <script>
   // If the app has not started after ten seconds, say so instead of sitting on "Loading".
   setTimeout(function () {

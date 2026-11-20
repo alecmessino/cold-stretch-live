@@ -2,11 +2,11 @@
 // Every local file is requested with the same ?v= release number, so a browser or CDN can never pair one release's
 // page with another's scripts. Bump it everywhere on release; tests/release.test.mjs fails if the numbers disagree.
 
-import { createModel, RULES, clockLabel, isClockGlitch, gapStats, signalNow } from './model.js?v=19';
-import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=19';
-import { rangePlot, histogram, trendPanel, gameChart, unitsChart, fmt } from './charts.js?v=19';
-import { SITE, dataBase, safeLink, safeMail } from './site.js?v=19';
-import { boardWords, signalWords, agoWords } from './words.js?v=19';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats, signalNow } from './model.js?v=20';
+import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=20';
+import { rangePlot, histogram, trendPanel, gameChart, unitsChart, fmt } from './charts.js?v=20';
+import { SITE, dataBase, safeLink, safeMail } from './site.js?v=20';
+import { boardWords, signalWords, agoWords } from './words.js?v=20';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -221,6 +221,12 @@ function series(g, k = 'total') {
   return out;
 }
 
+/**
+ * A market's readings up to the minute signals stop. Past it the fair number means little (fouling, the clock, and a book
+ * that starts pricing overtime in a tied game), so the small charts and their summaries end there.
+ */
+const inWindow = (g, k = 'total') => series(g, k).filter((p) => p.t <= RULES.lastMinute);
+
 /** True when no signal can fire in this game at all: the pregame spread is past the limit. */
 const wideSpread = (g) => { const pre = preOf(g); return !!pre && Math.abs(pre[1]) >= RULES.blowoutSpread; };
 
@@ -261,7 +267,7 @@ function excursion(s, g) {
 
 /** One game as a small multiple. Returns the card and a function that draws its chart once the card is in the page. */
 function trendCard(g, i) {
-  const st = g.state === 'in' ? standing(g) : null, s = series(g), now = s[s.length - 1] || null;
+  const st = g.state === 'in' ? standing(g) : null, s = inWindow(g), now = s[s.length - 1] || null;
   const [text, cls] = word(g, st);
   const card = h('a', `tp${g.state === 'post' ? ' is-final' : ''}${i === S.cursor ? ' is-cursor' : ''}`);
   card.href = gameHash(g.id, st && st.best ? st.best.key : 'total');
@@ -354,7 +360,7 @@ function renderLead(all) {
   $('#fig-high').textContent = st.n ? `${st.high.toFixed(1)}%` : '–';
   $('#fig-sig').textContent = st.n ? String(signals) : '–';
   const y = yard();
-  $('#sigma-note').textContent = `The bold line is the three-minute rolling average of fair minus book, and the signal is judged on it. One deviation is ${y.total.toFixed(1)} points, the usual spread of that average. A signal needs ${RULES.buyDev}, about ${(RULES.buyDev * y.total).toFixed(1)} points, at a price the chance clears.${y.readings ? ` Measured on ${y.readings} readings through ${dayLabel(y.through)}.` : ''}`;
+  $('#sigma-note').textContent = `The bold line is the three-minute rolling average of fair minus book, and the signal is judged on it. One deviation is ${y.total.toFixed(1)} points, the usual spread of that average. A signal needs ${RULES.buyDev}, about ${(RULES.buyDev * y.total).toFixed(1)} points, at a price the chance clears.${y.readings ? ` Measured on ${y.readings} readings through ${dayLabel(y.through)}.` : ''} Each small chart ends at minute ${RULES.lastMinute}, where signals stop.`;
   $('#hist-title').textContent = st.n ? `All ${plural(st.n, 'reading')}` : 'All readings';
   $('#hist-note').textContent = st.n ? `The three-minute average at every reading between minute ${RULES.measureFrom} and minute ${RULES.measureTo}, across ${plural(measured, 'game')}. Lopsided spots are left out, because signals are off there.` : 'The distribution fills in as lines are recorded.';
   return devs;
@@ -570,7 +576,7 @@ function renderGame() {
   });
   idle();
   const cards = ['total', 'away', 'home'].map((mk) => {
-    const sm = series(g, mk), end = sm[sm.length - 1] || null, card = h('button', 'tp'), plot = h('span', 'tp-plot'), nums = h('span', 'tp-nums');
+    const sm = inWindow(g, mk), end = sm[sm.length - 1] || null, card = h('button', 'tp'), plot = h('span', 'tp-plot'), nums = h('span', 'tp-nums');
     card.type = 'button'; card.setAttribute('aria-pressed', String(mk === k));
     const title = mk === 'total' ? 'Game total' : `${g[mk].name} team total`;
     const num = (lb, value, kind) => { const c = h('span'); c.append(document.createTextNode(`${lb} `), h('b', kind, value)); return c; };
@@ -642,8 +648,15 @@ function renderRecord() {
   $('#r-all').textContent = tally(live);
   $('#r-units').textContent = settled.length ? signed(units) : '–';
   $('#r-units').className = settled.length && units > 0 ? 'is-over' : settled.length && units < 0 ? 'is-under' : '';
-  $('#r-over').textContent = tally(live.filter((s) => s.side === 'Over'));
-  $('#r-under').textContent = tally(live.filter((s) => s.side === 'Under'));
+  // By game: a game total and its team totals are one view of one game, so each game counts once, by its net units.
+  const net = new Map();
+  for (const s of live) if (s.result === 'Won' || s.result === 'Lost' || s.result === 'Push') net.set(s.game, (net.get(s.game) || 0) + pay(s));
+  const ahead = [...net.values()].filter((u) => u > 0).length, behind = [...net.values()].filter((u) => u < 0).length;
+  $('#r-games').textContent = net.size ? `${ahead}–${behind}` : '–';
+  $('#r-totals').textContent = tally(live.filter((s) => (s.mkt || '') === 'total' || s.market === 'Game total'));
+  const sides = [['Overs', tally(live.filter((s) => s.side === 'Over'))], ['Unders', tally(live.filter((s) => s.side === 'Under'))]].filter((x) => x[1] !== '–');
+  $('#r-sides').textContent = sides.map((x) => `${x[0]} ${x[1]}.`).join(' ') + (net.size - ahead - behind ? ` ${plural(net.size - ahead - behind, 'game')} level.` : '');
+  $('#r-sides').hidden = !sides.length;
   // Units signal by signal, in the order they fired: every live-scored signal, and game totals alone beside it.
   const run = live.filter((s) => s.result === 'Won' || s.result === 'Lost' || s.result === 'Push').sort((a, b) => a.ts - b.ts);
   let all = 0, tot = 0;
@@ -912,7 +925,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 (async () => {
-  try { S.model = createModel(await getJSON('model.json?v=19')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  try { S.model = createModel(await getJSON('model.json?v=20')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
   window.cslBooted = true;
   setupSite();
   await applyRoute();
