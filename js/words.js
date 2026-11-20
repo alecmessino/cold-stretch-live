@@ -44,8 +44,9 @@ export function signalWords(now, limits) {
   if (!now || now.state === 'none') return { text: 'No live line right now', on: false };
   if (now.state === 'off') return { text: now.why === 'late' ? `Past minute ${limits.lastMinute}, where signals stop` : `Lead of ${limits.lead} or more, where signals are off`, on: false };
   const line = now.line.toFixed(1);
-  if (now.state === 'on') { const at = `${line}${now.quoted ? ` (${price(now.price)})` : ''}`; return { text: now.moved ? `Still on, line now ${at}` : `Still on at ${at}`, on: true }; }
-  return { text: now.moved ? `Line now ${line}, edge gone` : `Edge gone at ${line}`, on: false };
+  // The line named is the one showing now; the row above it carries the line the signal fired at.
+  if (now.state === 'on') return { text: `Still on at ${line}${now.quoted ? ` (${price(now.price)})` : ''}`, on: true };
+  return { text: `Edge gone at ${line}`, on: false };
 }
 
 /** How long ago a signal fired, for the minutes it is fresh. */

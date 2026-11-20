@@ -151,13 +151,19 @@ export function gameChart(host, d) {
     .attr('transform', (s) => `translate(${x(s.minute)},${y(s.line) + (s.side === 'Over' ? 13 : -13)}) rotate(${s.side === 'Over' ? 0 : 180})`)
     .attr('fill', (s) => (s.side === 'Over' ? 'var(--fair)' : 'var(--book)')).attr('stroke', 'var(--panel)');
   // each signal named where it fired: the side and the line it was logged at
-  // an over is named below and to the right of its marker, an under above and to the left, so two that fire together stay apart
-  const flip = (s) => (s.side === 'Over' ? x(s.minute) + 80 > W - m.r : x(s.minute) - 80 < m.l); // no room on its own side
-  svg.append('g').selectAll('text').data(d.signals).join('text').attr('class', 'lbl sig')
-    .attr('text-anchor', (s) => ((s.side === 'Over') !== flip(s) ? 'start' : 'end'))
-    .attr('x', (s) => x(s.minute) + ((s.side === 'Over') !== flip(s) ? 9 : -9))
-    .attr('y', (s) => Math.max(m.t + 10, Math.min(m.t + topH - 6, y(s.line) + (s.side === 'Over' ? 27 : -19))))
-    .style('fill', (s) => (s.side === 'Over' ? 'var(--fair)' : 'var(--book)')).text((s) => `${s.side} ${f1(s.line)}`);
+  // An over is named below its marker and an under above. The name goes to the right of an over and the left of an under,
+  // so two that fire together stay apart, unless the lines are still being drawn there (a signal a few minutes old in a
+  // live game) or there is no room: then it goes to the left, over what has already happened.
+  const lastX = d.book.length ? x(d.book[d.book.length - 1].t) : m.l, tagW = 80;
+  const tags = d.signals.map((s) => {
+    const sx = x(s.minute), over = s.side === 'Over';
+    const right = over ? sx + tagW <= W - m.r && (d.final != null || lastX - sx > tagW + 10) && sx + tagW <= W - m.r : sx - tagW < m.l;
+    return { s, right, x: sx + (right ? 9 : -9), y: Math.max(m.t + 10, Math.min(m.t + topH - 6, y(s.line) + (over ? 27 : -19))) };
+  });
+  if (tags.length === 2 && tags[0].right === tags[1].right && Math.abs(tags[0].x - tags[1].x) < tagW && Math.abs(tags[0].y - tags[1].y) < 14) {
+    const [hi, lo] = tags[0].y <= tags[1].y ? tags : [tags[1], tags[0]];
+    lo.y = Math.min(m.t + topH - 6, hi.y + 14); if (lo.y - hi.y < 14) hi.y = lo.y - 14;
+  }
   const ends = [{ y: y(d.pregame), x: W - m.r, text: name('Pregame', f1(d.pregame)), fill: 'var(--sub)', dot: null }];
   if (d.fair.length && d.final == null) { const p = d.fair[d.fair.length - 1]; ends.push({ y: y(p.v), x: x(p.t), text: name('Fair', f1(p.v)), fill: 'var(--fair)', dot: 'var(--fair)' }); }
   if (d.book.length) { const p = d.book[d.book.length - 1]; ends.push({ y: y(p.v), x: x(p.t), text: name('Book', f1(p.v)), fill: 'var(--book)', dot: 'var(--book)' }); }
@@ -168,6 +174,9 @@ export function gameChart(host, d) {
   for (const e of ends) if (e.dot) svg.append('circle').attr('cx', e.x).attr('cy', e.y).attr('r', 4).attr('fill', e.dot).attr('stroke', 'var(--panel)').attr('stroke-width', 1.5);
   ends.sort((a, b) => a.y - b.y).forEach((e, i, arr) => { if (i && e.y - arr[i - 1].y < 15) e.y = arr[i - 1].y + 15; });
   for (const e of ends) svg.append('text').attr('class', 'lbl').attr('x', W - m.r + 9).attr('y', e.y).attr('dy', '0.32em').style('fill', e.fill).text(e.text);
+  // drawn last, over the lines and their end dots
+  svg.append('g').selectAll('text').data(tags).join('text').attr('class', 'lbl sig').attr('text-anchor', (t) => (t.right ? 'start' : 'end')).attr('x', (t) => t.x).attr('y', (t) => t.y)
+    .style('fill', (t) => (t.s.side === 'Over' ? 'var(--fair)' : 'var(--book)')).text((t) => `${t.s.side} ${f1(t.s.line)}`);
 
   // ---- bottom pane: score flow against pregame pace
   const by0 = m.t + topH + gap;

@@ -55,6 +55,8 @@ export function signalNow(s, row) {
   const m = row ? row.markets[s.market] : null;
   if (!m || m.line == null || m.over == null) return { state: 'none' };
   const quoted = s.market === 'total' && row.quote ? row.quote[s.side === 'Over' ? 0 : 1] : null;
+  // A game total showing a line but no price is off the board for the moment: nothing can be bet, so nothing is claimed.
+  if (s.market === 'total' && quoted == null) return { state: 'none' };
   const price = quoted == null ? -115 : quoted, chance = s.side === 'Over' ? m.over : 1 - m.over, need = breakEven(price) + RULES.margin;
   const base = { line: m.line, price, quoted: quoted != null, chance, need, moved: m.line !== s.line };
   if (!row.eligible) return { ...base, state: 'off', why: row.t > RULES.lastMinute ? 'late' : 'lopsided' };

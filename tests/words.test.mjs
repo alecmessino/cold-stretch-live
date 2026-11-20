@@ -49,10 +49,9 @@ test('lines not yet recorded while games are live, or never recorded', () => {
 test('an open signal says whether it can still be bet', () => {
   const lim = { lastMinute: 38, lead: 15 }, say2 = (now) => signalWords(now, lim);
   assert.deepEqual(say2({ state: 'on', line: 147.5, price: -118, quoted: true, moved: false }), { text: 'Still on at 147.5 (−118)', on: true });
-  assert.equal(say2({ state: 'on', line: 146.5, price: 105, quoted: true, moved: true }).text, 'Still on, line now 146.5 (+105)');
+  assert.equal(say2({ state: 'on', line: 146.5, price: 105, quoted: true, moved: true }).text, 'Still on at 146.5 (+105)');
   assert.equal(say2({ state: 'on', line: 71, price: -115, quoted: false, moved: false }).text, 'Still on at 71.0', 'an estimated price is not shown as a quote');
-  assert.deepEqual(say2({ state: 'gone', line: 144.5, moved: true }), { text: 'Line now 144.5, edge gone', on: false });
-  assert.equal(say2({ state: 'gone', line: 147.5, moved: false }).text, 'Edge gone at 147.5');
+  assert.deepEqual(say2({ state: 'gone', line: 144.5, moved: true }), { text: 'Edge gone at 144.5', on: false });
   assert.equal(say2({ state: 'off', why: 'late' }).text, 'Past minute 38, where signals stop');
   assert.equal(say2({ state: 'off', why: 'lopsided' }).text, 'Lead of 15 or more, where signals are off');
   assert.equal(say2({ state: 'none' }).on, false);

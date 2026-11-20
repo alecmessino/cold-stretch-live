@@ -148,6 +148,9 @@ test('an open signal is checked against the quote showing now', () => {
   assert.equal(signalNow(s, last(steady([5, 5, 5, 5, 5], { h0: 30 + RULES.blowoutLead }))).why, 'lopsided');
   assert.equal(signalNow(s, last(steady([5, 5, 5, 5, 5], { start: 38.2, every: 20 }))).why, 'late');
   assert.equal(signalNow(s, null).state, 'none', 'no fresh line, no read');
+  const unpriced = last(held); unpriced.quote = [null, null];
+  assert.equal(signalNow(s, unpriced).state, 'none', 'a game total with a line but no price is off the board');
+  assert.equal(signalNow({ ...s, market: 'home' }, unpriced).state, 'on', 'a team total never had a quoted price to lose');
   const team = signalNow({ ...s, market: 'home' }, last(held));
   assert.equal(team.quoted, false); assert.equal(team.price, -115, 'team totals have no quoted price');
 });

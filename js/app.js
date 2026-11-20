@@ -2,11 +2,11 @@
 // Every local file is requested with the same ?v= release number, so a browser or CDN can never pair one release's
 // page with another's scripts. Bump it everywhere on release; tests/release.test.mjs fails if the numbers disagree.
 
-import { createModel, RULES, clockLabel, isClockGlitch, gapStats, signalNow } from './model.js?v=18';
-import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=18';
-import { rangePlot, histogram, trendPanel, gameChart, unitsChart, fmt } from './charts.js?v=18';
-import { SITE, dataBase, safeLink, safeMail } from './site.js?v=18';
-import { boardWords, signalWords, agoWords } from './words.js?v=18';
+import { createModel, RULES, clockLabel, isClockGlitch, gapStats, signalNow } from './model.js?v=19';
+import { urls, getJSON, parseEvent, parseOdds, parseSummary } from './espn.js?v=19';
+import { rangePlot, histogram, trendPanel, gameChart, unitsChart, fmt } from './charts.js?v=19';
+import { SITE, dataBase, safeLink, safeMail } from './site.js?v=19';
+import { boardWords, signalWords, agoWords } from './words.js?v=19';
 
 const { f1, signed } = fmt;
 const $ = (s) => document.querySelector(s);
@@ -912,7 +912,7 @@ document.addEventListener('keydown', (e) => {
 });
 
 (async () => {
-  try { S.model = createModel(await getJSON('model.json?v=18')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
+  try { S.model = createModel(await getJSON('model.json?v=19')); } catch { $('#pulse').textContent = 'Could not load the model file.'; return; }
   window.cslBooted = true;
   setupSite();
   await applyRoute();

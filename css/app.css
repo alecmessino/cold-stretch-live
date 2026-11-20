@@ -254,7 +254,7 @@ h2 { font: 600 23px/1.2 var(--serif); letter-spacing: -0.005em; }
 .scrub .v-fair { color: var(--fair); }
 .chart { touch-action: pan-y; }
 .chart .lbl { font-size: 13px; font-weight: 700; }
-.chart .sig { font-size: 12px; paint-order: stroke; stroke: var(--panel); stroke-width: 3px; stroke-linejoin: round; }
+.chart .sig { font-size: 12px; paint-order: stroke; stroke: var(--panel); stroke-width: 5px; stroke-linejoin: round; }
 .chart .ttl { font-size: 13px; font-weight: 600; fill: var(--ink); }
 .chart .vacant { border: 0; padding: 36px 0; }
 
